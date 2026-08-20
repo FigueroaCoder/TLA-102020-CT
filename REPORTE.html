@@ -1,0 +1,869 @@
+<!DOCTYPE html>
+<html lang="es" class="scroll-smooth">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>REPORTE 102020 - Control de Pruebas CT</title>
+    <!-- Tailwind CSS, Chart.js, Chart.js DataLabels Plugin y SheetJS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels@2.2.0"></script>
+    <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+</head>
+<body class="bg-slate-100 p-6 text-slate-800 min-h-screen">
+
+    <!-- Pantalla de Inicio de Sesión (Login Modal) -->
+    <div id="loginScreen" class="fixed inset-0 bg-slate-900 bg-opacity-80 z-50 flex items-center justify-center p-4">
+        <div class="bg-white p-8 rounded-2xl shadow-xl max-w-md w-full space-y-6">
+            <div class="text-center">
+                <span class="px-3 py-1 bg-blue-100 text-blue-800 rounded-md text-xs font-bold uppercase">Acceso Restringido</span>
+                <h2 class="text-2xl font-bold text-slate-900 mt-2">REPORTE 102020</h2>
+                <p class="text-sm text-slate-500 mt-1">Ingresa con tus credenciales para acceder</p>
+            </div>
+
+            <form id="loginForm" onsubmit="handleLogin(event)" class="space-y-4">
+                <div>
+                    <label class="block text-xs font-bold uppercase text-slate-600 mb-1">Correo Electrónico</label>
+                    <input type="email" id="loginEmail" required placeholder="usuario@empresa.com" class="w-full px-4 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
+                </div>
+                <div>
+                    <label class="block text-xs font-bold uppercase text-slate-600 mb-1">Contraseña</label>
+                    <input type="password" id="loginPassword" required placeholder="••••••••" class="w-full px-4 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
+                </div>
+
+                <div id="loginError" class="hidden text-xs text-red-600 font-semibold bg-red-50 p-2.5 rounded border border-red-200">
+                    Credenciales incorrectas o usuario no registrado.
+                </div>
+
+                <button type="submit" id="btnLogin" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-2.5 rounded-lg text-sm transition">
+                    Iniciar Sesión
+                </button>
+            </form>
+        </div>
+    </div>
+
+    <!-- Contenido Principal de la Aplicación -->
+    <div id="appContent" class="hidden max-w-7xl mx-auto space-y-6">
+        
+        <!-- Header Principal -->
+        <div class="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
+            <!-- Barra Superior: Info del Proyecto y Usuario -->
+            <div class="p-5 border-b border-slate-100 flex flex-col md:flex-row md:items-center justify-between gap-4 bg-slate-50/50">
+                <div>
+                    <div class="flex items-center gap-2">
+                        <span class="px-2.5 py-0.5 bg-blue-100 text-blue-800 rounded-md text-xs font-bold uppercase">Proyecto</span>
+                        <h1 class="text-2xl font-extrabold text-slate-900 tracking-tight">REPORTE 102020</h1>
+                    </div>
+                    <p id="activeRecordBanner" class="text-xs font-medium text-slate-500 mt-1">Cargando datos del sistema...</p>
+                </div>
+
+                <div class="flex items-center gap-4 text-right">
+                    <div>
+                        <span class="text-[10px] text-slate-400 block font-bold uppercase tracking-wider">Último Corte</span>
+                        <span id="lastUpdatedText" class="text-sm font-extrabold text-slate-700">--:--:--</span>
+                    </div>
+                    <div class="h-8 w-px bg-slate-200 hidden sm:block"></div>
+                    <div>
+                        <span id="currentUserBadge" class="text-xs font-medium text-slate-600 block">--</span>
+                        <button onclick="handleLogout()" class="text-xs font-bold text-red-600 hover:text-red-800 underline">Cerrar Sesión</button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Barra Inferior: Botones de Acción -->
+            <div class="p-4 bg-white flex flex-wrap items-center justify-between gap-3">
+                <div class="flex flex-wrap items-center gap-2">
+                    <!-- Carga de Archivo (SOLO ADMIN) -->
+                    <label id="uploadBtnContainer" class="hidden cursor-pointer bg-blue-600 hover:bg-blue-700 text-white px-3.5 py-2 rounded-lg font-semibold text-xs shadow-sm transition flex items-center gap-1.5">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"></path></svg>
+                        <span>Cargar Archivo Excel</span>
+                        <input type="file" id="fileUploader" accept=".xlsx, .xls, .csv" class="hidden">
+                    </label>
+
+                    <!-- Exportar a Excel -->
+                    <button onclick="exportToExcel(false)" class="bg-emerald-600 hover:bg-emerald-700 text-white px-3.5 py-2 rounded-lg font-semibold text-xs shadow-sm transition flex items-center gap-1.5">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path></svg>
+                        <span>Exportar Corte a Excel</span>
+                    </button>
+                </div>
+
+                <div>
+                    <!-- Borrar Corte Activo (SOLO ADMIN) -->
+                    <button id="deleteActiveBtn" onclick="deleteCurrentSnapshot()" class="hidden bg-red-50 hover:bg-red-100 text-red-600 border border-red-200 px-3.5 py-2 rounded-lg font-semibold text-xs transition">
+                        Borrar Corte Activo
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Historial y Administrador -->
+        <div class="bg-white p-4 rounded-xl shadow-sm border border-slate-200 flex flex-wrap justify-between items-center gap-4">
+            <div class="flex items-center gap-3">
+                <span class="text-sm font-bold text-slate-700">Seleccionar Corte:</span>
+                <select id="historySelect" onchange="onHistoryChange(this.value)" class="bg-slate-50 border border-slate-300 rounded-lg px-3 py-1.5 text-sm text-slate-700 font-medium focus:outline-none">
+                    <option value="latest">Cargando datos...</option>
+                </select>
+            </div>
+
+            <!-- Botón del Administrador de Historial (SOLO ADMIN) -->
+            <button id="toggleHistoryBtn" onclick="toggleHistoryManager()" class="hidden text-xs font-semibold text-slate-600 hover:text-slate-900 underline">
+                Gestionar/Eliminar Cortes del Historial
+            </button>
+        </div>
+
+        <!-- Panel Administrador de Historial -->
+        <div id="historyManagerPanel" class="hidden bg-slate-50 border border-slate-200 p-4 rounded-xl space-y-3">
+            <h3 class="text-sm font-bold text-slate-800">Administrador de Cargas Registradas</h3>
+            <p class="text-xs text-slate-500">Selecciona cualquier carga errónea para eliminar permanentemente todo su lote de registros.</p>
+            <div id="historyListContainer" class="divide-y divide-slate-200 max-h-48 overflow-y-auto bg-white rounded-lg border border-slate-200">
+            </div>
+        </div>
+
+        <!-- Warning Histórico -->
+        <div id="historicalWarning" class="hidden bg-amber-50 border border-amber-200 p-3 rounded-lg flex justify-between items-center text-amber-800 text-sm">
+            <span id="historicalWarningText" class="font-medium">Viendo snapshot del historial</span>
+            <button onclick="loadLatestData()" class="underline font-bold text-amber-900 hover:text-amber-700">Volver a la versión más reciente</button>
+        </div>
+
+        <!-- Tarjetas Interactivas de Estatus -->
+        <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
+            <div id="cardRunning" onclick="filterByStatusCard('RUNNING')" class="bg-white p-5 rounded-xl border border-slate-200 shadow-sm cursor-pointer hover:border-blue-500 transition">
+                <div class="flex justify-between items-center">
+                    <span class="text-xs font-bold text-blue-600 uppercase tracking-wider">Pruebas Corriendo</span>
+                    <span class="text-xs bg-blue-50 text-blue-600 px-2 py-0.5 rounded font-semibold">Filtro</span>
+                </div>
+                <div id="countRunning" class="text-3xl font-extrabold text-slate-800 mt-2">0</div>
+                <p class="text-xs text-slate-400 mt-1">Haz clic para ver series en este corte</p>
+            </div>
+
+            <div id="cardPassed" onclick="filterByStatusCard('PASS')" class="bg-white p-5 rounded-xl border border-slate-200 shadow-sm cursor-pointer hover:border-emerald-500 transition">
+                <div class="flex justify-between items-center">
+                    <span class="text-xs font-bold text-emerald-600 uppercase tracking-wider">Pruebas Pasadas</span>
+                    <span class="text-xs bg-emerald-50 text-emerald-600 px-2 py-0.5 rounded font-semibold">Filtro</span>
+                </div>
+                <div id="countPassed" class="text-3xl font-extrabold text-slate-800 mt-2">0</div>
+                <p class="text-xs text-slate-400 mt-1">Haz clic para ver series aprobadas</p>
+            </div>
+
+            <div id="cardFailed" onclick="filterByStatusCard('FAIL')" class="bg-white p-5 rounded-xl border border-slate-200 shadow-sm cursor-pointer hover:border-red-500 transition">
+                <div class="flex justify-between items-center">
+                    <span class="text-xs font-bold text-red-600 uppercase tracking-wider">Pruebas Falladas</span>
+                    <span class="text-xs bg-red-50 text-red-600 px-2 py-0.5 rounded font-semibold">Filtro</span>
+                </div>
+                <div id="countFailed" class="text-3xl font-extrabold text-slate-800 mt-2">0</div>
+                <p class="text-xs text-slate-400 mt-1">Haz clic para ver series con fallas</p>
+            </div>
+        </div>
+
+        <!-- Gráfico Principal -->
+        <div class="bg-white p-6 rounded-xl shadow-sm border border-slate-200">
+            <div class="flex justify-between items-center mb-4">
+                <div>
+                    <h2 class="text-lg font-bold text-slate-800">Distribución General por Estatus</h2>
+                    <p class="text-xs text-slate-500">Haz clic en cualquier barra para filtrar la tabla de abajo</p>
+                </div>
+                <!-- Indicador CT Totales y Rango Temporal -->
+                <div class="bg-slate-100 border border-slate-200 px-3.5 py-2 rounded-lg text-right">
+                    <span class="text-[10px] font-bold uppercase text-slate-500 block tracking-wider">CT totales</span>
+                    <span id="chartTotalCount" class="text-base font-extrabold text-slate-800 block">0 series</span>
+                    <span id="chartDateRange" class="text-[11px] font-medium text-slate-500 block mt-0.5">Rango: --</span>
+                </div>
+            </div>
+            <div class="w-full h-80">
+                <canvas id="statusChart"></canvas>
+            </div>
+        </div>
+
+        <!-- BOTÓN DESPLEGABLE: Resumen Día a Día (Debajo de la gráfica) -->
+        <div class="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
+            <!-- Encabezado / Botón Desplegable -->
+            <button onclick="toggleDailySummary()" class="w-full p-4 bg-slate-50 hover:bg-slate-100/80 transition flex items-center justify-between text-left focus:outline-none">
+                <div class="flex items-center gap-3">
+                    <div class="p-2 bg-blue-100 text-blue-700 rounded-lg">
+                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 002-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"></path></svg>
+                    </div>
+                    <div>
+                        <h2 class="text-base font-bold text-slate-800">Resumen Diario de Pruebas (Pass vs Fail)</h2>
+                        <p class="text-xs text-slate-500">Haz clic aquí para desplegar o contraer el desglose diario</p>
+                    </div>
+                </div>
+                <div class="flex items-center gap-2">
+                    <span id="dailySummaryBadge" class="text-xs bg-slate-200 text-slate-700 font-bold px-2.5 py-1 rounded-full">0 días registrados</span>
+                    <svg id="dailySummaryChevron" class="w-5 h-5 text-slate-400 transform transition-transform duration-200" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path>
+                    </svg>
+                </div>
+            </button>
+
+            <!-- Contenido Desplegable (Oculto por defecto) -->
+            <div id="dailySummaryContent" class="hidden border-t border-slate-200 p-5 space-y-3">
+                <p class="text-xs text-slate-500 font-medium">Haz clic en los botones de acción para filtrar exactamente qué series pasaron o fallaron en cada día:</p>
+                <div class="overflow-x-auto">
+                    <table class="w-full text-left text-sm border-collapse">
+                        <thead class="bg-slate-50 text-slate-600 font-semibold border-b">
+                            <tr>
+                                <th class="p-3">Fecha</th>
+                                <th class="p-3 text-center">Total Pruebas</th>
+                                <th class="p-3 text-center">Pasadas (PASS)</th>
+                                <th class="p-3 text-center">Falladas (FAIL)</th>
+                                <th class="p-3 text-center">Corriendo</th>
+                                <th class="p-3 text-right">Acción</th>
+                            </tr>
+                        </thead>
+                        <tbody id="dailySummaryBody" class="divide-y divide-slate-100">
+                            <!-- Generado dinámicamente por JS -->
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <!-- Tabla de Datos -->
+        <div id="tablaDetalle" onclick="scrollToTable()" class="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden cursor-pointer">
+            <div class="p-4 border-b border-slate-100 flex flex-wrap justify-between items-center gap-2">
+                <div>
+                    <h2 class="text-lg font-bold text-slate-800 flex items-center gap-2 group">
+                        <span>Detalle de Series Registradas</span>
+                        <svg class="w-4 h-4 text-slate-400 group-hover:text-blue-600 transition" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path></svg>
+                    </h2>
+                    <p id="tableFilterLabel" class="text-xs text-slate-500 font-medium">Mostrando todas las series del corte actual</p>
+                </div>
+                <div class="flex items-center gap-2" onclick="event.stopPropagation()">
+                    <span id="tableCount" class="text-xs font-bold bg-slate-100 px-3 py-1 rounded-full text-slate-600">0 filas</span>
+                    <button id="exportFilteredBtn" onclick="exportToExcel(true)" class="hidden text-xs bg-slate-700 hover:bg-slate-800 text-white px-2.5 py-1 rounded font-semibold">Descargar Filtrados a Excel</button>
+                    <button id="clearFilterBtn" onclick="clearStatusFilter()" class="hidden text-xs bg-slate-200 hover:bg-slate-300 text-slate-700 px-2.5 py-1 rounded font-semibold">Ver Todos</button>
+                </div>
+            </div>
+            <div class="overflow-x-auto">
+                <table class="w-full text-left text-sm">
+                    <thead class="bg-slate-50 text-slate-600 font-semibold border-b">
+                        <tr>
+                            <th class="p-3">Serial</th>
+                            <th class="p-3">Status</th>
+                            <th class="p-3">Model / Phase</th>
+                            <th class="p-3">Fecha/Hora de Carga</th>
+                        </tr>
+                    </thead>
+                    <tbody id="tableBody" class="divide-y divide-slate-100">
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+    </div>
+
+    <!-- SDK Firebase Auth y Firestore -->
+    <script type="module">
+        import { initializeApp, getApps } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
+        import { getAuth, signInWithEmailAndPassword, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
+        import { getFirestore, collection, addDoc, getDocs, deleteDoc, doc, query, orderBy, limit } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
+
+        // CONFIGURACIÓN DE REPORTE 102020
+        const firebaseConfig = {
+            apiKey: "AIzaSyDRyOIq60td7k1RrzTokcN4fECozmWx0b8",
+            authDomain: "reporte-102020.firebaseapp.com",
+            projectId: "reporte-102020",
+            storageBucket: "reporte-102020.firebasestorage.app",
+            messagingSenderId: "648112274870",
+            appId: "1:648112274870:web:0b7bd510ed93e5881a5517",
+            measurementId: "G-JBYLE3TQGR"
+        };
+
+        const app = getApps().length ? getApps()[0] : initializeApp(firebaseConfig);
+        const auth = getAuth(app);
+        const db = getFirestore(app);
+
+        const ADMIN_EMAIL = "roberto.figueroa@gdl.fii-na.com";
+        let isAdmin = false;
+
+        let activeData = [];
+        let currentlyDisplayedData = [];
+        let historicalSnapshots = [];
+        let currentSnapshotId = null;
+        let currentTimestampStr = '';
+        let chartInstance = null;
+
+        window.scrollToTable = function() {
+            document.getElementById('tablaDetalle')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        };
+
+        // Función para Desplegar / Contraer el Resumen Diario
+        window.toggleDailySummary = function() {
+            const content = document.getElementById('dailySummaryContent');
+            const chevron = document.getElementById('dailySummaryChevron');
+            
+            if (content.classList.contains('hidden')) {
+                content.classList.remove('hidden');
+                chevron.classList.add('rotate-180');
+            } else {
+                content.classList.add('hidden');
+                chevron.classList.remove('rotate-180');
+            }
+        };
+
+        onAuthStateChanged(auth, (user) => {
+            if (user) {
+                document.getElementById('loginScreen').classList.add('hidden');
+                document.getElementById('appContent').classList.remove('hidden');
+
+                const userEmail = (user.email || "").toLowerCase().trim();
+                isAdmin = (userEmail === ADMIN_EMAIL.toLowerCase().trim());
+
+                document.getElementById('currentUserBadge').innerText = `${user.email} (${isAdmin ? 'Admin' : 'Lectura'})`;
+
+                applyUserPermissions();
+                loadLatestData();
+                setupFileUploader();
+            } else {
+                document.getElementById('loginScreen').classList.remove('hidden');
+                document.getElementById('appContent').classList.add('hidden');
+            }
+        });
+
+        function applyUserPermissions() {
+            const uploadBtn = document.getElementById('uploadBtnContainer');
+            const deleteActiveBtn = document.getElementById('deleteActiveBtn');
+            const toggleHistoryBtn = document.getElementById('toggleHistoryBtn');
+
+            if (isAdmin) {
+                uploadBtn.classList.remove('hidden');
+                deleteActiveBtn.classList.remove('hidden');
+                toggleHistoryBtn.classList.remove('hidden');
+            } else {
+                uploadBtn.classList.add('hidden');
+                deleteActiveBtn.classList.add('hidden');
+                toggleHistoryBtn.classList.add('hidden');
+            }
+        }
+
+        // Manejo de Login con manejo de errores detallado
+        window.handleLogin = async function(e) {
+            e.preventDefault();
+            const email = document.getElementById('loginEmail').value.trim();
+            const pass = document.getElementById('loginPassword').value;
+            const errDiv = document.getElementById('loginError');
+
+            errDiv.classList.add('hidden');
+            errDiv.innerText = '';
+
+            try {
+                await signInWithEmailAndPassword(auth, email, pass);
+            } catch (err) {
+                console.error("Error detallado de autenticación:", err.code, err.message);
+                errDiv.classList.remove('hidden');
+                
+                switch (err.code) {
+                    case 'auth/user-not-found':
+                        errDiv.innerText = 'El usuario no está registrado en Firebase Authentication.';
+                        break;
+                    case 'auth/wrong-password':
+                    case 'auth/invalid-credential':
+                        errDiv.innerText = 'Correo o contraseña incorrectos.';
+                        break;
+                    case 'auth/user-disabled':
+                        errDiv.innerText = 'Esta cuenta ha sido deshabilitada por el administrador.';
+                        break;
+                    case 'auth/invalid-email':
+                        errDiv.innerText = 'El formato del correo electrónico no es válido.';
+                        break;
+                    default:
+                        errDiv.innerText = `Error al iniciar sesión: ${err.message}`;
+                        break;
+                }
+            }
+        };
+
+        window.handleLogout = function() {
+            signOut(auth);
+        };
+
+        window.loadLatestData = async function() {
+            try {
+                await fetchHistoryList();
+
+                const q = query(collection(db, "historial_cargas"), orderBy("timestamp", "desc"), limit(1));
+                const snap = await getDocs(q);
+
+                if (!snap.empty) {
+                    const latestDoc = snap.docs[0];
+                    const data = latestDoc.data();
+                    currentSnapshotId = latestDoc.id;
+                    renderDataset(data.records, data.formattedDate, false);
+                } else {
+                    currentSnapshotId = null;
+                    renderDataset([], "--:--:--", false);
+                }
+            } catch (err) {
+                console.error("Error al cargar datos:", err);
+            }
+        };
+
+        async function fetchHistoryList() {
+            try {
+                const q = query(collection(db, "historial_cargas"), orderBy("timestamp", "desc"));
+                const snap = await getDocs(q);
+                
+                historicalSnapshots = [];
+                const historySelect = document.getElementById('historySelect');
+                const historyListContainer = document.getElementById('historyListContainer');
+
+                historySelect.innerHTML = '';
+                historyListContainer.innerHTML = '';
+
+                if (snap.empty) {
+                    historySelect.innerHTML = `<option value="">Sin cargas registradas</option>`;
+                    historyListContainer.innerHTML = `<p class="p-3 text-xs text-slate-400 text-center">No hay registros en la base de datos.</p>`;
+                    return;
+                }
+
+                snap.forEach((d, idx) => {
+                    const data = d.data();
+                    const docId = d.id;
+                    historicalSnapshots.push({ id: docId, ...data });
+
+                    const option = document.createElement('option');
+                    option.value = docId;
+                    option.innerText = (idx === 0) ? `Última actualización (${data.formattedDate})` : `${data.formattedDate} (${data.records.length} items)`;
+                    historySelect.appendChild(option);
+
+                    const row = document.createElement('div');
+                    row.className = "p-3 flex justify-between items-center text-xs text-slate-700 hover:bg-slate-50";
+                    
+                    const deleteBtnHtml = isAdmin ? `
+                        <button onclick="deleteSnapshotById('${docId}', '${data.formattedDate}')" class="text-red-600 hover:text-red-800 font-bold px-2 py-1 rounded hover:bg-red-50">
+                            Eliminar Lote
+                        </button>
+                    ` : '';
+
+                    row.innerHTML = `
+                        <div>
+                            <span class="font-bold text-slate-900">${data.formattedDate}</span>
+                            <span class="text-slate-400 ml-2">(${data.records ? data.records.length : 0} series)</span>
+                        </div>
+                        ${deleteBtnHtml}
+                    `;
+                    historyListContainer.appendChild(row);
+                });
+            } catch (err) {
+                console.error("Error obteniendo historial:", err);
+            }
+        }
+
+        window.onHistoryChange = function(selectedId) {
+            if (!selectedId) return;
+            const selected = historicalSnapshots.find(item => item.id === selectedId);
+            if (!selected) return;
+
+            currentSnapshotId = selected.id;
+            const isLatest = historicalSnapshots[0] && historicalSnapshots[0].id === selectedId;
+            renderDataset(selected.records, selected.formattedDate, !isLatest);
+        };
+
+        window.toggleHistoryManager = function() {
+            if (!isAdmin) return;
+            document.getElementById('historyManagerPanel').classList.toggle('hidden');
+        };
+
+        window.deleteCurrentSnapshot = async function() {
+            if (!isAdmin) {
+                alert("No tienes permisos para realizar esta acción.");
+                return;
+            }
+
+            if (!currentSnapshotId) {
+                alert("No hay un corte activo para eliminar.");
+                return;
+            }
+
+            if (confirm(`¿Confirmas eliminar el lote de datos cargado el ${currentTimestampStr}?`)) {
+                await deleteSnapshotById(currentSnapshotId, currentTimestampStr);
+            }
+        };
+
+        window.deleteSnapshotById = async function(docId, dateLabel) {
+            if (!isAdmin) {
+                alert("No tienes permisos para realizar esta acción.");
+                return;
+            }
+
+            if (!confirm(`¿Eliminar la carga del ${dateLabel}?`)) return;
+
+            try {
+                await deleteDoc(doc(db, "historial_cargas", docId));
+                alert(`Carga del ${dateLabel} eliminada.`);
+                await loadLatestData();
+            } catch (err) {
+                console.error("Error al eliminar:", err);
+                alert("Error eliminando la carga.");
+            }
+        };
+
+        function formatRawDocs(rawJsonArray) {
+            return rawJsonArray.map(row => {
+                const rowValues = Object.values(row);
+                return {
+                    serial: row['Serial'] || row['Serial Number'] || rowValues[0] || 'N/A',
+                    status: String(row['Status'] || row['Current Status'] || row['Fail Reason'] || rowValues[1] || 'SIN ESTATUS').trim().toUpperCase(),
+                    model: String(row['Model'] || row['Modelo'] || rowValues[2] || 'N/A').trim(),
+                    phase: String(row['Phase'] || row['Fase'] || 'N/A').trim(),
+                    receivedFull: `${row['Date Received'] || row['Date'] || ''} ${row['Time Received'] || row['Time'] || ''}`.trim() || 'N/A'
+                };
+            });
+        }
+
+        function renderDataset(data, timestampText, isHistorical) {
+            activeData = data || [];
+            currentlyDisplayedData = activeData;
+            currentTimestampStr = timestampText;
+
+            document.getElementById('lastUpdatedText').innerText = timestampText;
+            document.getElementById('activeRecordBanner').innerText = activeData.length === 0
+                ? "No existen cargas en el sistema."
+                : (isHistorical ? `Mostrando corte histórico del: ${timestampText}` : `Datos actualizados por última vez el ${timestampText}`);
+
+            const warningBox = document.getElementById('historicalWarning');
+            if (isHistorical) {
+                warningBox.classList.remove('hidden');
+                document.getElementById('historicalWarningText').innerText = `Viendo estado de los datos al corte de fecha/hora: ${timestampText}`;
+            } else {
+                warningBox.classList.add('hidden');
+            }
+
+            processAndRender(activeData);
+        }
+
+        function processAndRender(data) {
+            let countRun = 0;
+            let countPass = 0;
+            let countFail = 0;
+
+            let firstRecordTime = null;
+
+            data.forEach(row => {
+                const st = row.status;
+                if (st.includes('RUN') || st.includes('TEST') || st.includes('CORRIENDO')) {
+                    countRun++;
+                } else if (st.includes('PASS') || st.includes('EXITO')) {
+                    countPass++;
+                } else {
+                    countFail++;
+                }
+
+                if (row.receivedFull && row.receivedFull !== 'N/A') {
+                    const parsedDate = new Date(row.receivedFull);
+                    if (!isNaN(parsedDate.getTime())) {
+                        if (!firstRecordTime || parsedDate < firstRecordTime) {
+                            firstRecordTime = parsedDate;
+                        }
+                    } else if (!firstRecordTime) {
+                        firstRecordTime = row.receivedFull;
+                    }
+                }
+            });
+
+            let firstTimeStr = "--";
+            if (firstRecordTime) {
+                if (firstRecordTime instanceof Date) {
+                    firstTimeStr = `${firstRecordTime.toLocaleDateString()} ${firstRecordTime.toLocaleTimeString()}`;
+                } else {
+                    firstTimeStr = firstRecordTime;
+                }
+            }
+
+            const rangeElem = document.getElementById('chartDateRange');
+            if (rangeElem) {
+                if (data.length > 0) {
+                    rangeElem.innerText = `Del ${firstTimeStr} al ${currentTimestampStr}`;
+                } else {
+                    rangeElem.innerText = `Rango: Sin datos`;
+                }
+            }
+
+            document.getElementById('countRunning').innerText = countRun;
+            document.getElementById('countPassed').innerText = countPass;
+            document.getElementById('countFailed').innerText = countFail;
+
+            renderDailySummary(data);
+            renderTable(data);
+            renderChart({
+                'Corriendo': countRun,
+                'Pasadas': countPass,
+                'Falladas': countFail
+            });
+        }
+
+        // RENDERIZAR RESUMEN DÍA A DÍA
+        function renderDailySummary(data) {
+            const dailyMap = {};
+
+            data.forEach(row => {
+                let dateKey = "Sin Fecha";
+                if (row.receivedFull && row.receivedFull !== 'N/A') {
+                    const parts = row.receivedFull.split(' ');
+                    dateKey = parts[0] || "Sin Fecha";
+                }
+
+                if (!dailyMap[dateKey]) {
+                    dailyMap[dateKey] = { total: 0, pass: 0, fail: 0, run: 0 };
+                }
+
+                dailyMap[dateKey].total++;
+
+                const st = row.status;
+                if (st.includes('RUN') || st.includes('TEST') || st.includes('CORRIENDO')) {
+                    dailyMap[dateKey].run++;
+                } else if (st.includes('PASS') || st.includes('EXITO')) {
+                    dailyMap[dateKey].pass++;
+                } else {
+                    dailyMap[dateKey].fail++;
+                }
+            });
+
+            const summaryBody = document.getElementById('dailySummaryBody');
+            summaryBody.innerHTML = '';
+
+            const sortedDates = Object.keys(dailyMap).sort().reverse();
+
+            const badgeElem = document.getElementById('dailySummaryBadge');
+            if (badgeElem) {
+                badgeElem.innerText = `${sortedDates.length} días registrados`;
+            }
+
+            if (sortedDates.length === 0) {
+                summaryBody.innerHTML = `<tr><td colspan="6" class="p-3 text-center text-slate-400">Sin datos de fechas disponibles</td></tr>`;
+                return;
+            }
+
+            sortedDates.forEach(date => {
+                const stat = dailyMap[date];
+                const tr = document.createElement('tr');
+                tr.className = "hover:bg-slate-50 transition";
+                tr.innerHTML = `
+                    <td class="p-3 font-bold text-slate-700">${date}</td>
+                    <td class="p-3 text-center font-bold text-slate-800">${stat.total}</td>
+                    <td class="p-3 text-center font-bold text-emerald-600 bg-emerald-50/50">${stat.pass}</td>
+                    <td class="p-3 text-center font-bold text-red-600 bg-red-50/50">${stat.fail}</td>
+                    <td class="p-3 text-center font-bold text-blue-600 bg-blue-50/50">${stat.run}</td>
+                    <td class="p-3 text-right space-x-1">
+                        <button onclick="filterByDayAndStatus('${date}', 'ALL')" class="text-xs bg-slate-100 hover:bg-slate-200 text-slate-700 px-2 py-1 rounded font-semibold">Ver Todo el Día</button>
+                        <button onclick="filterByDayAndStatus('${date}', 'PASS')" class="text-xs bg-emerald-100 hover:bg-emerald-200 text-emerald-800 px-2 py-1 rounded font-semibold">Solo Pass (${stat.pass})</button>
+                        <button onclick="filterByDayAndStatus('${date}', 'FAIL')" class="text-xs bg-red-100 hover:bg-red-200 text-red-800 px-2 py-1 rounded font-semibold">Solo Fail (${stat.fail})</button>
+                    </td>
+                `;
+                summaryBody.appendChild(tr);
+            });
+        }
+
+        window.filterByDayAndStatus = function(targetDate, statusType) {
+            const filtered = activeData.filter(row => {
+                let rowDate = "Sin Fecha";
+                if (row.receivedFull && row.receivedFull !== 'N/A') {
+                    rowDate = row.receivedFull.split(' ')[0] || "Sin Fecha";
+                }
+
+                if (rowDate !== targetDate) return false;
+
+                const st = row.status;
+                if (statusType === 'PASS') return st.includes('PASS') || st.includes('EXITO');
+                if (statusType === 'FAIL') return !st.includes('RUN') && !st.includes('TEST') && !st.includes('CORRIENDO') && !st.includes('PASS') && !st.includes('EXITO');
+                if (statusType === 'RUN') return st.includes('RUN') || st.includes('TEST') || st.includes('CORRIENDO');
+
+                return true;
+            });
+
+            currentlyDisplayedData = filtered;
+            document.getElementById('clearFilterBtn').classList.remove('hidden');
+            document.getElementById('exportFilteredBtn').classList.remove('hidden');
+
+            const statusText = statusType === 'ALL' ? 'todas las series' : (statusType === 'PASS' ? 'que PASARON' : 'que FALLARON');
+            document.getElementById('tableFilterLabel').innerText = `Filtrado por Fecha: ${targetDate} (${statusText})`;
+            renderTable(filtered);
+
+            scrollToTable();
+        };
+
+        window.filterByStatusCard = function(category) {
+            const filtered = activeData.filter(row => {
+                const st = row.status;
+                if (category === 'RUNNING') return st.includes('RUN') || st.includes('TEST') || st.includes('CORRIENDO');
+                if (category === 'PASS') return st.includes('PASS') || st.includes('EXITO');
+                if (category === 'FAIL') return !st.includes('RUN') && !st.includes('TEST') && !st.includes('CORRIENDO') && !st.includes('PASS') && !st.includes('EXITO');
+                return true;
+            });
+
+            currentlyDisplayedData = filtered;
+            document.getElementById('clearFilterBtn').classList.remove('hidden');
+            document.getElementById('exportFilteredBtn').classList.remove('hidden');
+            document.getElementById('tableFilterLabel').innerText = `Filtrado por tipo: ${category}`;
+            renderTable(filtered);
+
+            scrollToTable();
+        };
+
+        window.clearStatusFilter = function() {
+            currentlyDisplayedData = activeData;
+            document.getElementById('clearFilterBtn').classList.add('hidden');
+            document.getElementById('exportFilteredBtn').classList.add('hidden');
+            document.getElementById('tableFilterLabel').innerText = `Mostrando todas las series del corte actual`;
+            renderTable(activeData);
+        };
+
+        function renderTable(dataList) {
+            const tableBody = document.getElementById('tableBody');
+            tableBody.innerHTML = '';
+            document.getElementById('tableCount').innerText = `${dataList.length} filas`;
+
+            dataList.forEach(row => {
+                const tr = document.createElement('tr');
+                tr.className = 'hover:bg-slate-50 transition cursor-pointer';
+
+                const st = row.status;
+                let badgeStyle = 'bg-red-100 text-red-800';
+                if (st.includes('RUN') || st.includes('TEST') || st.includes('CORRIENDO')) badgeStyle = 'bg-blue-100 text-blue-800';
+                if (st.includes('PASS') || st.includes('EXITO')) badgeStyle = 'bg-emerald-100 text-emerald-800';
+
+                tr.innerHTML = `
+                    <td class="p-3 font-mono font-bold text-slate-800">${row.serial}</td>
+                    <td class="p-3"><span class="px-2.5 py-1 rounded-full text-xs font-semibold ${badgeStyle}">${row.status}</span></td>
+                    <td class="p-3 text-slate-500">${row.model} / ${row.phase}</td>
+                    <td class="p-3 text-slate-500">${row.receivedFull}</td>
+                `;
+                tableBody.appendChild(tr);
+            });
+        }
+
+        function renderChart(groupedCounts) {
+            const totalCount = (groupedCounts['Corriendo'] || 0) + (groupedCounts['Pasadas'] || 0) + (groupedCounts['Falladas'] || 0);
+            
+            const totalElem = document.getElementById('chartTotalCount');
+            if (totalElem) totalElem.innerText = `${totalCount} series`;
+
+            const ctx = document.getElementById('statusChart').getContext('2d');
+            if (chartInstance) chartInstance.destroy();
+
+            Chart.register(ChartDataLabels);
+
+            chartInstance = new Chart(ctx, {
+                type: 'bar',
+                data: {
+                    labels: ['Pruebas Corriendo', 'Pruebas Pasadas', 'Pruebas Falladas'],
+                    datasets: [{
+                        label: 'Cantidad de Series',
+                        data: [
+                            groupedCounts['Corriendo'] || 0,
+                            groupedCounts['Pasadas'] || 0,
+                            groupedCounts['Falladas'] || 0
+                        ],
+                        backgroundColor: ['#3B82F6', '#10B981', '#EF4444'],
+                        borderRadius: 6,
+                        borderSkipped: false
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    onClick: (event, elements) => {
+                        if (elements.length > 0) {
+                            const index = elements[0].index;
+                            const categories = ['RUNNING', 'PASS', 'FAIL'];
+                            filterByStatusCard(categories[index]);
+                        }
+                    },
+                    onHover: (event, elements) => {
+                        event.native.target.style.cursor = elements.length ? 'pointer' : 'default';
+                    },
+                    layout: {
+                        padding: { top: 25 }
+                    },
+                    plugins: { 
+                        legend: { display: false },
+                        datalabels: {
+                            anchor: 'end',
+                            align: 'top',
+                            offset: 4,
+                            color: '#1E293B',
+                            font: { weight: 'bold', size: 13 },
+                            formatter: function(value) { return value; }
+                        }
+                    },
+                    scales: {
+                        y: {
+                            beginAtZero: true,
+                            ticks: { precision: 0 }
+                        }
+                    }
+                }
+            });
+        }
+
+        window.exportToExcel = function(onlyFiltered = false) {
+            const exportData = onlyFiltered ? currentlyDisplayedData : activeData;
+
+            if (!exportData || exportData.length === 0) {
+                alert("No hay registros para exportar.");
+                return;
+            }
+
+            const formattedForExcel = exportData.map(item => ({
+                "Serial Number": item.serial,
+                "Status": item.status,
+                "Model": item.model,
+                "Phase": item.phase,
+                "Fecha y Hora de Carga": item.receivedFull
+            }));
+
+            const worksheet = XLSX.utils.json_to_sheet(formattedForExcel);
+            const workbook = XLSX.utils.book_new();
+            XLSX.utils.book_append_sheet(workbook, worksheet, "Reporte 102020");
+
+            const dateClean = (currentTimestampStr || "corte").replace(/[\/\\:*?"<>| ]/g, "_");
+            const suffix = onlyFiltered ? "filtrado" : "completo";
+            XLSX.writeFile(workbook, `Reporte_102020_${suffix}_${dateClean}.xlsx`);
+        };
+
+        function setupFileUploader() {
+            const uploader = document.getElementById('fileUploader');
+            if (!uploader) return;
+
+            uploader.addEventListener('change', function(e) {
+                if (!isAdmin) {
+                    alert("No tienes permisos para subir archivos.");
+                    return;
+                }
+
+                const file = e.target.files[0];
+                if (!file) return;
+
+                const reader = new FileReader();
+                reader.onload = async function(evt) {
+                    const data = new Uint8Array(evt.target.result);
+                    const workbook = XLSX.read(data, {type: 'array'});
+                    const firstSheet = workbook.Sheets[workbook.SheetNames[0]];
+                    const json = XLSX.utils.sheet_to_json(firstSheet, {raw: false});
+
+                    const parsedRecords = formatRawDocs(json);
+                    const now = new Date();
+                    const formattedDate = `${now.toLocaleDateString()} ${now.toLocaleTimeString()}`;
+
+                    try {
+                        const newDocRef = await addDoc(collection(db, "historial_cargas"), {
+                            timestamp: now.getTime(),
+                            formattedDate: formattedDate,
+                            records: parsedRecords
+                        });
+
+                        currentSnapshotId = newDocRef.id;
+                        renderDataset(parsedRecords, formattedDate, false);
+                        await fetchHistoryList();
+                        alert(`Archivo procesado con éxito. Nuevo corte registrado a las ${formattedDate}.`);
+                    } catch (err) {
+                        console.error("Error al guardar snapshot:", err);
+                        alert("Error guardando el corte en Firestore.");
+                    }
+                };
+                reader.readAsArrayBuffer(file);
+            });
+        }
+    </script>
+</body>
+</html>
