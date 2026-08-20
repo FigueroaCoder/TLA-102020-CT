@@ -155,26 +155,7 @@
             </div>
         </div>
 
-        <!-- Gráfico Principal -->
-        <div class="bg-white p-6 rounded-xl shadow-sm border border-slate-200">
-            <div class="flex justify-between items-center mb-4">
-                <div>
-                    <h2 class="text-lg font-bold text-slate-800">Distribución General por Estatus</h2>
-                    <p class="text-xs text-slate-500">Haz clic en cualquier barra para filtrar la tabla de abajo</p>
-                </div>
-                <!-- Indicador CT Totales y Rango Temporal -->
-                <div class="bg-slate-100 border border-slate-200 px-3.5 py-2 rounded-lg text-right">
-                    <span class="text-[10px] font-bold uppercase text-slate-500 block tracking-wider">CT totales</span>
-                    <span id="chartTotalCount" class="text-base font-extrabold text-slate-800 block">0 series</span>
-                    <span id="chartDateRange" class="text-[11px] font-medium text-slate-500 block mt-0.5">Rango: --</span>
-                </div>
-            </div>
-            <div class="w-full h-80">
-                <canvas id="statusChart"></canvas>
-            </div>
-        </div>
-
-        <!-- BOTÓN DESPLEGABLE: Resumen Día a Día (Debajo de la gráfica) -->
+        <!-- BOTÓN DESPLEGABLE: Resumen Día a Día -->
         <div class="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
             <!-- Encabezado / Botón Desplegable -->
             <button onclick="toggleDailySummary()" class="w-full p-4 bg-slate-50 hover:bg-slate-100/80 transition flex items-center justify-between text-left focus:outline-none">
@@ -215,6 +196,31 @@
                         </tbody>
                     </table>
                 </div>
+            </div>
+        </div>
+
+        <!-- Gráfico Principal -->
+        <div class="bg-white p-6 rounded-xl shadow-sm border border-slate-200">
+            <div class="flex justify-between items-center mb-4">
+                <div>
+                    <h2 class="text-lg font-bold text-slate-800">Distribución General por Estatus</h2>
+                    <p class="text-xs text-slate-500">Haz clic en cualquier barra para filtrar la tabla de abajo</p>
+                </div>
+                
+                <!-- Indicador CT Totales, Únicas, Repetidas y Rango Temporal -->
+                <div class="bg-slate-100 border border-slate-200 px-3.5 py-2 rounded-lg text-right">
+                    <span class="text-[10px] font-bold uppercase text-slate-500 block tracking-wider">CT totales</span>
+                    <span id="chartTotalCount" class="text-base font-extrabold text-slate-800 block">0 series</span>
+                    <div class="flex items-center justify-end gap-2 text-[11px] font-bold mt-1 border-t border-slate-200 pt-1">
+                        <span class="text-emerald-700"><span id="uniqueCount">0</span> únicas</span>
+                        <span class="text-slate-300">•</span>
+                        <span class="text-amber-700"><span id="duplicateCount">0</span> repetidas</span>
+                    </div>
+                    <span id="chartDateRange" class="text-[11px] font-medium text-slate-500 block mt-1">Rango: --</span>
+                </div>
+            </div>
+            <div class="w-full h-80">
+                <canvas id="statusChart"></canvas>
             </div>
         </div>
 
@@ -538,6 +544,23 @@
             let countFail = 0;
 
             let firstRecordTime = null;
+
+            // Conteo de series únicas y repetidas
+            const serialsSet = new Set();
+            data.forEach(row => {
+                if (row.serial && row.serial !== 'N/A') {
+                    serialsSet.add(row.serial);
+                }
+            });
+
+            const uniqueSerialsCount = serialsSet.size;
+            const duplicateSerialsCount = data.length - uniqueSerialsCount;
+
+            // Actualizar etiquetas en la tarjeta
+            const uniqueElem = document.getElementById('uniqueCount');
+            const dupElem = document.getElementById('duplicateCount');
+            if (uniqueElem) uniqueElem.innerText = uniqueSerialsCount;
+            if (dupElem) dupElem.innerText = duplicateSerialsCount;
 
             data.forEach(row => {
                 const st = row.status;
