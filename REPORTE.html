@@ -9,10 +9,87 @@
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels@2.2.0"></script>
     <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+
+    <!-- SCRIPT DE SEGURIDAD Y BLOQUEOS AVANZADOS + AUTORECARGA Y TEMPORIZADOR (1 HORA) -->
+    <script>
+        (function() {
+            // Ajustado a 1 hora (3600 segundos)
+            const TOTAL_SECONDS = 60 * 60; 
+            let secondsLeft = TOTAL_SECONDS;
+
+            function updateCountdownUI() {
+                const hours = Math.floor(secondsLeft / 3600);
+                const minutes = Math.floor((secondsLeft % 3600) / 60);
+                const seconds = secondsLeft % 60;
+
+                const formattedTime = `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
+                
+                const timerElem = document.getElementById('autoRefreshTimer');
+                if (timerElem) {
+                    timerElem.innerText = `Próxima recarga: ${formattedTime}`;
+                }
+            }
+
+            // Iniciar cuenta regresiva cada segundo
+            setInterval(() => {
+                secondsLeft--;
+                if (secondsLeft <= 0) {
+                    window.location.reload();
+                } else {
+                    updateCountdownUI();
+                }
+            }, 1000);
+
+            document.addEventListener('contextmenu', (e) => e.preventDefault());
+
+            document.addEventListener('keydown', (e) => {
+                const isMac = navigator.platform.toUpperCase().indexOf('MAC') >= 0;
+                const cmdOrCtrl = isMac ? e.metaKey : e.ctrlKey;
+
+                if (e.key === 'F12') {
+                    e.preventDefault();
+                    return false;
+                }
+
+                if (cmdOrCtrl) {
+                    const key = e.key.toLowerCase();
+                    if (['u', 's', 'p'].includes(key)) {
+                        e.preventDefault();
+                        return false;
+                    }
+
+                    const hasShiftOrAlt = isMac ? e.altKey : e.shiftKey;
+                    if (hasShiftOrAlt && ['i', 'j', 'c'].includes(key)) {
+                        e.preventDefault();
+                        return false;
+                    }
+                }
+            });
+
+            const threshold = 160;
+            function detectDevToolsByResize() {
+                const widthThreshold = window.outerWidth - window.innerWidth > threshold;
+                const heightThreshold = window.outerHeight - window.innerHeight > threshold;
+                if (widthThreshold || heightThreshold) {
+                    window.location.reload();
+                }
+            }
+            window.addEventListener('resize', detectDevToolsByResize);
+
+            setInterval(() => {
+                const start = performance.now();
+                debugger;
+                const end = performance.now();
+                if (end - start > 100) {
+                    window.location.reload();
+                }
+            }, 500);
+        })();
+    </script>
 </head>
 <body class="bg-slate-100 p-6 text-slate-800 min-h-screen">
 
-    <!-- Pantalla de Inicio de Sesión (Login Modal) -->
+    <!-- Pantalla de Inicio de Sesión -->
     <div id="loginScreen" class="fixed inset-0 bg-slate-900 bg-opacity-80 z-50 flex items-center justify-center p-4">
         <div class="bg-white p-8 rounded-2xl shadow-xl max-w-md w-full space-y-6">
             <div class="text-center">
@@ -42,12 +119,11 @@
         </div>
     </div>
 
-    <!-- Contenido Principal de la Aplicación -->
+    <!-- Contenido Principal -->
     <div id="appContent" class="hidden max-w-7xl mx-auto space-y-6">
         
         <!-- Header Principal -->
         <div class="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
-            <!-- Barra Superior: Info del Proyecto y Usuario -->
             <div class="p-5 border-b border-slate-100 flex flex-col md:flex-row md:items-center justify-between gap-4 bg-slate-50/50">
                 <div>
                     <div class="flex items-center gap-2">
@@ -60,7 +136,9 @@
                 <div class="flex items-center gap-4 text-right">
                     <div>
                         <span class="text-[10px] text-slate-400 block font-bold uppercase tracking-wider">Último Corte</span>
-                        <span id="lastUpdatedText" class="text-sm font-extrabold text-slate-700">--:--:--</span>
+                        <span id="lastUpdatedText" class="text-sm font-extrabold text-slate-700 block">--:--:--</span>
+                        <!-- Reloj regresivo formateado HH:MM:SS empezando en 01:00:00 -->
+                        <span id="autoRefreshTimer" class="text-[11px] font-semibold text-blue-600 block mt-0.5">Próxima recarga: 01:00:00</span>
                     </div>
                     <div class="h-8 w-px bg-slate-200 hidden sm:block"></div>
                     <div>
@@ -70,25 +148,16 @@
                 </div>
             </div>
 
-            <!-- Barra Inferior: Botones de Acción -->
             <div class="p-4 bg-white flex flex-wrap items-center justify-between gap-3">
                 <div class="flex flex-wrap items-center gap-2">
-                    <!-- Carga de Archivo (SOLO ADMIN) -->
                     <label id="uploadBtnContainer" class="hidden cursor-pointer bg-blue-600 hover:bg-blue-700 text-white px-3.5 py-2 rounded-lg font-semibold text-xs shadow-sm transition flex items-center gap-1.5">
                         <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"></path></svg>
                         <span>Cargar Archivo Excel</span>
                         <input type="file" id="fileUploader" accept=".xlsx, .xls, .csv" class="hidden">
                     </label>
-
-                    <!-- Exportar a Excel -->
-                    <button onclick="exportToExcel(false)" class="bg-emerald-600 hover:bg-emerald-700 text-white px-3.5 py-2 rounded-lg font-semibold text-xs shadow-sm transition flex items-center gap-1.5">
-                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path></svg>
-                        <span>Exportar Corte a Excel</span>
-                    </button>
                 </div>
 
                 <div>
-                    <!-- Borrar Corte Activo (SOLO ADMIN) -->
                     <button id="deleteActiveBtn" onclick="deleteCurrentSnapshot()" class="hidden bg-red-50 hover:bg-red-100 text-red-600 border border-red-200 px-3.5 py-2 rounded-lg font-semibold text-xs transition">
                         Borrar Corte Activo
                     </button>
@@ -96,8 +165,8 @@
             </div>
         </div>
 
-        <!-- Historial y Administrador -->
-        <div class="bg-white p-4 rounded-xl shadow-sm border border-slate-200 flex flex-wrap justify-between items-center gap-4">
+        <!-- Historial y Administrador (SOLO VISIBLE PARA ADMIN) -->
+        <div id="adminHistoryBar" class="hidden bg-white p-4 rounded-xl shadow-sm border border-slate-200 flex flex-wrap justify-between items-center gap-4">
             <div class="flex items-center gap-3">
                 <span class="text-sm font-bold text-slate-700">Seleccionar Corte:</span>
                 <select id="historySelect" onchange="onHistoryChange(this.value)" class="bg-slate-50 border border-slate-300 rounded-lg px-3 py-1.5 text-sm text-slate-700 font-medium focus:outline-none">
@@ -105,7 +174,6 @@
                 </select>
             </div>
 
-            <!-- Botón del Administrador de Historial (SOLO ADMIN) -->
             <button id="toggleHistoryBtn" onclick="toggleHistoryManager()" class="hidden text-xs font-semibold text-slate-600 hover:text-slate-900 underline">
                 Gestionar/Eliminar Cortes del Historial
             </button>
@@ -125,60 +193,48 @@
             <button onclick="loadLatestData()" class="underline font-bold text-amber-900 hover:text-amber-700">Volver a la versión más reciente</button>
         </div>
 
-        <!-- Tarjetas Interactivas de Estatus -->
-        <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
-            <div id="cardRunning" onclick="filterByStatusCard('RUNNING')" class="bg-white p-5 rounded-xl border border-slate-200 shadow-sm cursor-pointer hover:border-blue-500 transition">
-                <div class="flex justify-between items-center">
-                    <span class="text-xs font-bold text-blue-600 uppercase tracking-wider">Pruebas Corriendo</span>
-                    <span class="text-xs bg-blue-50 text-blue-600 px-2 py-0.5 rounded font-semibold">Filtro</span>
-                </div>
-                <div id="countRunning" class="text-3xl font-extrabold text-slate-800 mt-2">0</div>
-                <p class="text-xs text-slate-400 mt-1">Haz clic para ver series en este corte</p>
-            </div>
-
-            <div id="cardPassed" onclick="filterByStatusCard('PASS')" class="bg-white p-5 rounded-xl border border-slate-200 shadow-sm cursor-pointer hover:border-emerald-500 transition">
-                <div class="flex justify-between items-center">
-                    <span class="text-xs font-bold text-emerald-600 uppercase tracking-wider">Pruebas Pasadas</span>
-                    <span class="text-xs bg-emerald-50 text-emerald-600 px-2 py-0.5 rounded font-semibold">Filtro</span>
-                </div>
-                <div id="countPassed" class="text-3xl font-extrabold text-slate-800 mt-2">0</div>
-                <p class="text-xs text-slate-400 mt-1">Haz clic para ver series aprobadas</p>
-            </div>
-
-            <div id="cardFailed" onclick="filterByStatusCard('FAIL')" class="bg-white p-5 rounded-xl border border-slate-200 shadow-sm cursor-pointer hover:border-red-500 transition">
-                <div class="flex justify-between items-center">
-                    <span class="text-xs font-bold text-red-600 uppercase tracking-wider">Pruebas Falladas</span>
-                    <span class="text-xs bg-red-50 text-red-600 px-2 py-0.5 rounded font-semibold">Filtro</span>
-                </div>
-                <div id="countFailed" class="text-3xl font-extrabold text-slate-800 mt-2">0</div>
-                <p class="text-xs text-slate-400 mt-1">Haz clic para ver series con fallas</p>
-            </div>
-        </div>
-
-        <!-- BOTÓN DESPLEGABLE: Resumen Día a Día -->
+        <!-- Resumen Día a Día -->
         <div class="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
-            <!-- Encabezado / Botón Desplegable -->
             <button onclick="toggleDailySummary()" class="w-full p-4 bg-slate-50 hover:bg-slate-100/80 transition flex items-center justify-between text-left focus:outline-none">
                 <div class="flex items-center gap-3">
                     <div class="p-2 bg-blue-100 text-blue-700 rounded-lg">
-                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 002-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"></path></svg>
+                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 002-2H5a2 2 0 0-2 2v12a2 2 0 002 2z"></path></svg>
                     </div>
                     <div>
                         <h2 class="text-base font-bold text-slate-800">Resumen Diario de Pruebas (Pass vs Fail)</h2>
-                        <p class="text-xs text-slate-500">Haz clic aquí para desplegar o contraer el desglose diario</p>
+                        <p class="text-xs text-slate-500">Desglose acumulado por fecha</p>
                     </div>
                 </div>
-                <div class="flex items-center gap-2">
+                <div class="flex items-center gap-3">
                     <span id="dailySummaryBadge" class="text-xs bg-slate-200 text-slate-700 font-bold px-2.5 py-1 rounded-full">0 días registrados</span>
-                    <svg id="dailySummaryChevron" class="w-5 h-5 text-slate-400 transform transition-transform duration-200" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <svg id="dailySummaryChevron" class="w-5 h-5 text-slate-500 transition-transform duration-200 transform rotate-180" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path>
                     </svg>
                 </div>
             </button>
 
-            <!-- Contenido Desplegable (Oculto por defecto) -->
-            <div id="dailySummaryContent" class="hidden border-t border-slate-200 p-5 space-y-3">
+            <div id="dailySummaryContent" class="border-t border-slate-200 p-5 space-y-4">
                 <p class="text-xs text-slate-500 font-medium">Haz clic en los botones de acción para filtrar exactamente qué series pasaron o fallaron en cada día:</p>
+
+                <!-- BANNER REMARCADO: TOTAL CORRIENDO / RUNNING -->
+                <div onclick="filterByStatusCard('RUNNING')" 
+                     class="bg-blue-50/80 hover:bg-blue-100/90 border border-blue-200 rounded-xl p-3.5 flex items-center justify-between gap-4 cursor-pointer transition shadow-sm hover:shadow group"
+                     title="Haz clic para ver las series corriendo en la tabla de abajo">
+                    <div class="flex items-center gap-3">
+                        <div class="p-2 bg-blue-600 group-hover:bg-blue-700 text-white rounded-lg shadow-sm transition">
+                            <svg class="w-4 h-4 animate-spin" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path></svg>
+                        </div>
+                        <div>
+                            <span class="text-xs font-bold uppercase text-blue-900 tracking-wider block">Pruebas Corriendo Actualmente</span>
+                            <p class="text-xs text-blue-700 font-medium">Suma general de series en estado RUNNING acumuladas en todas las fechas (Haz clic para ver el detalle)</p>
+                        </div>
+                    </div>
+                    <div class="bg-white group-hover:bg-blue-50 border border-blue-200 rounded-lg px-4 py-1.5 shadow-sm text-center transition">
+                        <span id="totalRunningSumText" class="text-lg font-black text-blue-700 block leading-tight">0</span>
+                        <span class="text-[10px] font-bold text-slate-400 uppercase">Series</span>
+                    </div>
+                </div>
+
                 <div class="overflow-x-auto">
                     <table class="w-full text-left text-sm border-collapse">
                         <thead class="bg-slate-50 text-slate-600 font-semibold border-b">
@@ -188,11 +244,14 @@
                                 <th class="p-3 text-center">Pasadas (PASS)</th>
                                 <th class="p-3 text-center">Falladas (FAIL)</th>
                                 <th class="p-3 text-center">Corriendo</th>
+                                <th class="p-3 text-center">
+                                    % PASS
+                                    <span class="block text-[10px] font-normal text-slate-400 font-sans tracking-tight leading-none mt-0.5">(Solo Pruebas Concluidas)</span>
+                                </th>
                                 <th class="p-3 text-right">Acción</th>
                             </tr>
                         </thead>
                         <tbody id="dailySummaryBody" class="divide-y divide-slate-100">
-                            <!-- Generado dinámicamente por JS -->
                         </tbody>
                     </table>
                 </div>
@@ -204,10 +263,9 @@
             <div class="flex justify-between items-center mb-4">
                 <div>
                     <h2 class="text-lg font-bold text-slate-800">Distribución General por Estatus</h2>
-                    <p class="text-xs text-slate-500">Haz clic en cualquier barra para filtrar la tabla de abajo</p>
+                    <p class="text-xs text-slate-500">Haz clic en cualquier barra para desplegar y filtrar la tabla de abajo</p>
                 </div>
                 
-                <!-- Indicador CT Totales, Únicas, Repetidas y Rango Temporal -->
                 <div class="bg-slate-100 border border-slate-200 px-3.5 py-2 rounded-lg text-right">
                     <span class="text-[10px] font-bold uppercase text-slate-500 block tracking-wider">CT totales</span>
                     <span id="chartTotalCount" class="text-base font-extrabold text-slate-800 block">0 series</span>
@@ -225,12 +283,14 @@
         </div>
 
         <!-- Tabla de Datos -->
-        <div id="tablaDetalle" onclick="scrollToTable()" class="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden cursor-pointer">
-            <div class="p-4 border-b border-slate-100 flex flex-wrap justify-between items-center gap-2">
+        <div id="tablaDetalle" class="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
+            <button onclick="toggleTableDetails()" class="w-full p-4 bg-slate-50 hover:bg-slate-100/80 transition flex flex-wrap justify-between items-center gap-2 text-left focus:outline-none border-b border-slate-100">
                 <div>
-                    <h2 class="text-lg font-bold text-slate-800 flex items-center gap-2 group">
+                    <h2 class="text-lg font-bold text-slate-800 flex items-center gap-2">
                         <span>Detalle de Series Registradas</span>
-                        <svg class="w-4 h-4 text-slate-400 group-hover:text-blue-600 transition" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path></svg>
+                        <svg id="tableDetailsChevron" class="w-5 h-5 text-slate-500 transition-transform duration-200" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path>
+                        </svg>
                     </h2>
                     <p id="tableFilterLabel" class="text-xs text-slate-500 font-medium">Mostrando todas las series del corte actual</p>
                 </div>
@@ -239,21 +299,30 @@
                     <button id="exportFilteredBtn" onclick="exportToExcel(true)" class="hidden text-xs bg-slate-700 hover:bg-slate-800 text-white px-2.5 py-1 rounded font-semibold">Descargar Filtrados a Excel</button>
                     <button id="clearFilterBtn" onclick="clearStatusFilter()" class="hidden text-xs bg-slate-200 hover:bg-slate-300 text-slate-700 px-2.5 py-1 rounded font-semibold">Ver Todos</button>
                 </div>
-            </div>
-            <div class="overflow-x-auto">
+            </button>
+
+            <div id="tableDetailsContent" class="hidden overflow-x-auto">
                 <table class="w-full text-left text-sm">
                     <thead class="bg-slate-50 text-slate-600 font-semibold border-b">
                         <tr>
-                            <th class="p-3">Serial</th>
-                            <th class="p-3">Status</th>
-                            <th class="p-3">Model / Phase</th>
-                            <th class="p-3">Fecha/Hora de Carga</th>
+                            <th class="p-3">Serial CT</th>
+                            <th class="p-3">Status / Flujo Actual</th>
+                            <th class="p-3">TLA / Modelo</th>
+                            <th class="p-3">Último Evento (Fecha y Hora)</th>
                         </tr>
                     </thead>
                     <tbody id="tableBody" class="divide-y divide-slate-100">
                     </tbody>
                 </table>
             </div>
+        </div>
+
+        <!-- Botón Exportar -->
+        <div class="flex justify-start pt-2">
+            <button onclick="exportToExcel(false)" class="bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2.5 rounded-lg font-semibold text-sm shadow-sm transition flex items-center gap-2">
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path></svg>
+                <span>Exportar Corte a Excel</span>
+            </button>
         </div>
 
     </div>
@@ -264,7 +333,6 @@
         import { getAuth, signInWithEmailAndPassword, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
         import { getFirestore, collection, addDoc, getDocs, deleteDoc, doc, query, orderBy, limit } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
 
-        // CONFIGURACIÓN DE REPORTE 102020
         const firebaseConfig = {
             apiKey: "AIzaSyDRyOIq60td7k1RrzTokcN4fECozmWx0b8",
             authDomain: "reporte-102020.firebaseapp.com",
@@ -289,22 +357,28 @@
         let currentTimestampStr = '';
         let chartInstance = null;
 
-        window.scrollToTable = function() {
-            document.getElementById('tablaDetalle')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-        };
-
-        // Función para Desplegar / Contraer el Resumen Diario
         window.toggleDailySummary = function() {
             const content = document.getElementById('dailySummaryContent');
             const chevron = document.getElementById('dailySummaryChevron');
-            
+            content.classList.toggle('hidden');
+            chevron.classList.toggle('rotate-180');
+        };
+
+        window.toggleTableDetails = function() {
+            const content = document.getElementById('tableDetailsContent');
+            const chevron = document.getElementById('tableDetailsChevron');
+            content.classList.toggle('hidden');
+            chevron.classList.toggle('rotate-180');
+        };
+
+        window.openTableDetails = function() {
+            const content = document.getElementById('tableDetailsContent');
+            const chevron = document.getElementById('tableDetailsChevron');
             if (content.classList.contains('hidden')) {
                 content.classList.remove('hidden');
                 chevron.classList.add('rotate-180');
-            } else {
-                content.classList.add('hidden');
-                chevron.classList.remove('rotate-180');
             }
+            document.getElementById('tablaDetalle')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
         };
 
         onAuthStateChanged(auth, (user) => {
@@ -330,19 +404,21 @@
             const uploadBtn = document.getElementById('uploadBtnContainer');
             const deleteActiveBtn = document.getElementById('deleteActiveBtn');
             const toggleHistoryBtn = document.getElementById('toggleHistoryBtn');
+            const adminHistoryBar = document.getElementById('adminHistoryBar');
 
             if (isAdmin) {
                 uploadBtn.classList.remove('hidden');
                 deleteActiveBtn.classList.remove('hidden');
                 toggleHistoryBtn.classList.remove('hidden');
+                adminHistoryBar.classList.remove('hidden');
             } else {
                 uploadBtn.classList.add('hidden');
                 deleteActiveBtn.classList.add('hidden');
                 toggleHistoryBtn.classList.add('hidden');
+                adminHistoryBar.classList.add('hidden');
             }
         }
 
-        // Manejo de Login con manejo de errores detallado
         window.handleLogin = async function(e) {
             e.preventDefault();
             const email = document.getElementById('loginEmail').value.trim();
@@ -355,27 +431,9 @@
             try {
                 await signInWithEmailAndPassword(auth, email, pass);
             } catch (err) {
-                console.error("Error detallado de autenticación:", err.code, err.message);
+                console.error("Error de autenticación:", err.code, err.message);
                 errDiv.classList.remove('hidden');
-                
-                switch (err.code) {
-                    case 'auth/user-not-found':
-                        errDiv.innerText = 'El usuario no está registrado en Firebase Authentication.';
-                        break;
-                    case 'auth/wrong-password':
-                    case 'auth/invalid-credential':
-                        errDiv.innerText = 'Correo o contraseña incorrectos.';
-                        break;
-                    case 'auth/user-disabled':
-                        errDiv.innerText = 'Esta cuenta ha sido deshabilitada por el administrador.';
-                        break;
-                    case 'auth/invalid-email':
-                        errDiv.innerText = 'El formato del correo electrónico no es válido.';
-                        break;
-                    default:
-                        errDiv.innerText = `Error al iniciar sesión: ${err.message}`;
-                        break;
-                }
+                errDiv.innerText = 'Correo o contraseña incorrectos.';
             }
         };
 
@@ -471,27 +529,14 @@
         };
 
         window.deleteCurrentSnapshot = async function() {
-            if (!isAdmin) {
-                alert("No tienes permisos para realizar esta acción.");
-                return;
-            }
-
-            if (!currentSnapshotId) {
-                alert("No hay un corte activo para eliminar.");
-                return;
-            }
-
+            if (!isAdmin || !currentSnapshotId) return;
             if (confirm(`¿Confirmas eliminar el lote de datos cargado el ${currentTimestampStr}?`)) {
                 await deleteSnapshotById(currentSnapshotId, currentTimestampStr);
             }
         };
 
         window.deleteSnapshotById = async function(docId, dateLabel) {
-            if (!isAdmin) {
-                alert("No tienes permisos para realizar esta acción.");
-                return;
-            }
-
+            if (!isAdmin) return;
             if (!confirm(`¿Eliminar la carga del ${dateLabel}?`)) return;
 
             try {
@@ -500,21 +545,36 @@
                 await loadLatestData();
             } catch (err) {
                 console.error("Error al eliminar:", err);
-                alert("Error eliminando la carga.");
             }
         };
 
-        function formatRawDocs(rawJsonArray) {
-            return rawJsonArray.map(row => {
-                const rowValues = Object.values(row);
+        function formatRawDocs(rawMatrix) {
+            return rawMatrix.map(row => {
+                const colA = String(row[0] || '').trim();
+                const colB = String(row[1] || '').trim();
+                const colE = String(row[4] || '').trim();
+                const colG = String(row[6] || '').trim();
+                const colH = String(row[7] || '').trim();
+
+                const rawStatus = colB.toUpperCase();
+                let fullStatus = colB;
+
+                if (rawStatus.includes('PASS') || rawStatus.includes('EXITO')) {
+                    fullStatus = 'PASS';
+                } else if (rawStatus.includes('FAIL') || rawStatus.includes('FALLA')) {
+                    fullStatus = colG ? `FAIL - ${colG}` : 'FAIL';
+                } else if (rawStatus.includes('RUN') || rawStatus.includes('TEST') || rawStatus.includes('CORRIENDO')) {
+                    fullStatus = colB || 'RUNNING';
+                }
+
                 return {
-                    serial: row['Serial'] || row['Serial Number'] || rowValues[0] || 'N/A',
-                    status: String(row['Status'] || row['Current Status'] || row['Fail Reason'] || rowValues[1] || 'SIN ESTATUS').trim().toUpperCase(),
-                    model: String(row['Model'] || row['Modelo'] || rowValues[2] || 'N/A').trim(),
-                    phase: String(row['Phase'] || row['Fase'] || 'N/A').trim(),
-                    receivedFull: `${row['Date Received'] || row['Date'] || ''} ${row['Time Received'] || row['Time'] || ''}`.trim() || 'N/A'
+                    serial: colA || 'N/A',
+                    status: fullStatus || 'SIN ESTATUS',
+                    model: colE || 'N/A',
+                    phase: 'N/A',
+                    receivedFull: colH || 'N/A'
                 };
-            });
+            }).filter(item => item.serial !== 'N/A' && item.serial !== '');
         }
 
         function renderDataset(data, timestampText, isHistorical) {
@@ -545,7 +605,6 @@
 
             let firstRecordTime = null;
 
-            // Conteo de series únicas y repetidas
             const serialsSet = new Set();
             data.forEach(row => {
                 if (row.serial && row.serial !== 'N/A') {
@@ -556,14 +615,13 @@
             const uniqueSerialsCount = serialsSet.size;
             const duplicateSerialsCount = data.length - uniqueSerialsCount;
 
-            // Actualizar etiquetas en la tarjeta
             const uniqueElem = document.getElementById('uniqueCount');
             const dupElem = document.getElementById('duplicateCount');
             if (uniqueElem) uniqueElem.innerText = uniqueSerialsCount;
             if (dupElem) dupElem.innerText = duplicateSerialsCount;
 
             data.forEach(row => {
-                const st = row.status;
+                const st = row.status.toUpperCase();
                 if (st.includes('RUN') || st.includes('TEST') || st.includes('CORRIENDO')) {
                     countRun++;
                 } else if (st.includes('PASS') || st.includes('EXITO')) {
@@ -602,10 +660,6 @@
                 }
             }
 
-            document.getElementById('countRunning').innerText = countRun;
-            document.getElementById('countPassed').innerText = countPass;
-            document.getElementById('countFailed').innerText = countFail;
-
             renderDailySummary(data);
             renderTable(data);
             renderChart({
@@ -615,9 +669,9 @@
             });
         }
 
-        // RENDERIZAR RESUMEN DÍA A DÍA
         function renderDailySummary(data) {
             const dailyMap = {};
+            let totalRunningSum = 0;
 
             data.forEach(row => {
                 let dateKey = "Sin Fecha";
@@ -632,15 +686,21 @@
 
                 dailyMap[dateKey].total++;
 
-                const st = row.status;
+                const st = row.status.toUpperCase();
                 if (st.includes('RUN') || st.includes('TEST') || st.includes('CORRIENDO')) {
                     dailyMap[dateKey].run++;
+                    totalRunningSum++;
                 } else if (st.includes('PASS') || st.includes('EXITO')) {
                     dailyMap[dateKey].pass++;
                 } else {
                     dailyMap[dateKey].fail++;
                 }
             });
+
+            const totalRunningElem = document.getElementById('totalRunningSumText');
+            if (totalRunningElem) {
+                totalRunningElem.innerText = totalRunningSum;
+            }
 
             const summaryBody = document.getElementById('dailySummaryBody');
             summaryBody.innerHTML = '';
@@ -653,12 +713,16 @@
             }
 
             if (sortedDates.length === 0) {
-                summaryBody.innerHTML = `<tr><td colspan="6" class="p-3 text-center text-slate-400">Sin datos de fechas disponibles</td></tr>`;
+                summaryBody.innerHTML = `<tr><td colspan="7" class="p-3 text-center text-slate-400">Sin datos de fechas disponibles</td></tr>`;
                 return;
             }
 
             sortedDates.forEach(date => {
                 const stat = dailyMap[date];
+                const totalFinished = stat.pass + stat.fail;
+                const passPercentage = totalFinished > 0 ? ((stat.pass / totalFinished) * 100).toFixed(1) : 0;
+                const passBadgeColor = "bg-emerald-100 text-emerald-800";
+
                 const tr = document.createElement('tr');
                 tr.className = "hover:bg-slate-50 transition";
                 tr.innerHTML = `
@@ -667,6 +731,9 @@
                     <td class="p-3 text-center font-bold text-emerald-600 bg-emerald-50/50">${stat.pass}</td>
                     <td class="p-3 text-center font-bold text-red-600 bg-red-50/50">${stat.fail}</td>
                     <td class="p-3 text-center font-bold text-blue-600 bg-blue-50/50">${stat.run}</td>
+                    <td class="p-3 text-center font-bold">
+                        <span class="px-2.5 py-1 rounded-md text-xs font-semibold ${passBadgeColor}" title="Calculado sobre ${totalFinished} pruebas concluidas (${stat.pass} PASS / ${stat.fail} FAIL)">${passPercentage}%</span>
+                    </td>
                     <td class="p-3 text-right space-x-1">
                         <button onclick="filterByDayAndStatus('${date}', 'ALL')" class="text-xs bg-slate-100 hover:bg-slate-200 text-slate-700 px-2 py-1 rounded font-semibold">Ver Todo el Día</button>
                         <button onclick="filterByDayAndStatus('${date}', 'PASS')" class="text-xs bg-emerald-100 hover:bg-emerald-200 text-emerald-800 px-2 py-1 rounded font-semibold">Solo Pass (${stat.pass})</button>
@@ -686,7 +753,7 @@
 
                 if (rowDate !== targetDate) return false;
 
-                const st = row.status;
+                const st = row.status.toUpperCase();
                 if (statusType === 'PASS') return st.includes('PASS') || st.includes('EXITO');
                 if (statusType === 'FAIL') return !st.includes('RUN') && !st.includes('TEST') && !st.includes('CORRIENDO') && !st.includes('PASS') && !st.includes('EXITO');
                 if (statusType === 'RUN') return st.includes('RUN') || st.includes('TEST') || st.includes('CORRIENDO');
@@ -702,12 +769,12 @@
             document.getElementById('tableFilterLabel').innerText = `Filtrado por Fecha: ${targetDate} (${statusText})`;
             renderTable(filtered);
 
-            scrollToTable();
+            openTableDetails();
         };
 
         window.filterByStatusCard = function(category) {
             const filtered = activeData.filter(row => {
-                const st = row.status;
+                const st = row.status.toUpperCase();
                 if (category === 'RUNNING') return st.includes('RUN') || st.includes('TEST') || st.includes('CORRIENDO');
                 if (category === 'PASS') return st.includes('PASS') || st.includes('EXITO');
                 if (category === 'FAIL') return !st.includes('RUN') && !st.includes('TEST') && !st.includes('CORRIENDO') && !st.includes('PASS') && !st.includes('EXITO');
@@ -720,7 +787,7 @@
             document.getElementById('tableFilterLabel').innerText = `Filtrado por tipo: ${category}`;
             renderTable(filtered);
 
-            scrollToTable();
+            openTableDetails();
         };
 
         window.clearStatusFilter = function() {
@@ -740,7 +807,7 @@
                 const tr = document.createElement('tr');
                 tr.className = 'hover:bg-slate-50 transition cursor-pointer';
 
-                const st = row.status;
+                const st = row.status.toUpperCase();
                 let badgeStyle = 'bg-red-100 text-red-800';
                 if (st.includes('RUN') || st.includes('TEST') || st.includes('CORRIENDO')) badgeStyle = 'bg-blue-100 text-blue-800';
                 if (st.includes('PASS') || st.includes('EXITO')) badgeStyle = 'bg-emerald-100 text-emerald-800';
@@ -748,7 +815,7 @@
                 tr.innerHTML = `
                     <td class="p-3 font-mono font-bold text-slate-800">${row.serial}</td>
                     <td class="p-3"><span class="px-2.5 py-1 rounded-full text-xs font-semibold ${badgeStyle}">${row.status}</span></td>
-                    <td class="p-3 text-slate-500">${row.model} / ${row.phase}</td>
+                    <td class="p-3 text-slate-500">${row.model}</td>
                     <td class="p-3 text-slate-500">${row.receivedFull}</td>
                 `;
                 tableBody.appendChild(tr);
@@ -828,11 +895,10 @@
             }
 
             const formattedForExcel = exportData.map(item => ({
-                "Serial Number": item.serial,
-                "Status": item.status,
-                "Model": item.model,
-                "Phase": item.phase,
-                "Fecha y Hora de Carga": item.receivedFull
+                "Serial CT": item.serial,
+                "Status / Flujo": item.status,
+                "TLA / Modelo": item.model,
+                "Último Evento": item.receivedFull
             }));
 
             const worksheet = XLSX.utils.json_to_sheet(formattedForExcel);
@@ -860,11 +926,14 @@
                 const reader = new FileReader();
                 reader.onload = async function(evt) {
                     const data = new Uint8Array(evt.target.result);
-                    const workbook = XLSX.read(data, {type: 'array'});
+                    const workbook = XLSX.read(data, { type: 'array', cellDates: true, dateNF: 'yyyy-mm-dd hh:mm:ss' });
                     const firstSheet = workbook.Sheets[workbook.SheetNames[0]];
-                    const json = XLSX.utils.sheet_to_json(firstSheet, {raw: false});
+                    
+                    const rawMatrix = XLSX.utils.sheet_to_json(firstSheet, { header: 1, raw: false, dateNF: 'yyyy-mm-dd hh:mm:ss' });
 
-                    const parsedRecords = formatRawDocs(json);
+                    if (rawMatrix.length > 0) rawMatrix.shift();
+
+                    const parsedRecords = formatRawDocs(rawMatrix);
                     const now = new Date();
                     const formattedDate = `${now.toLocaleDateString()} ${now.toLocaleTimeString()}`;
 
@@ -878,6 +947,7 @@
                         currentSnapshotId = newDocRef.id;
                         renderDataset(parsedRecords, formattedDate, false);
                         await fetchHistoryList();
+                        uploader.value = '';
                         alert(`Archivo procesado con éxito. Nuevo corte registrado a las ${formattedDate}.`);
                     } catch (err) {
                         console.error("Error al guardar snapshot:", err);
