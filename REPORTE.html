@@ -153,18 +153,9 @@
                     <!-- Archivo FIND CT -->
                     <div class="bg-white p-3 rounded-lg border border-slate-200 shadow-sm space-y-1.5">
                         <label class="block text-xs font-bold text-slate-700">Documento FIND CT / Bulk Trace (Excel o CSV)</label>
-                        <p class="text-[11px] text-slate-400">Fuente principal: de aquí se toman directamente los estatus PASS / FAIL / RUNNING de cada serie.</p>
                         <input type="file" id="fileFindCT" accept=".xlsx, .xls, .csv" class="block w-full text-xs text-slate-500 file:mr-3 file:py-1.5 file:px-3 file:rounded-md file:border-0 file:text-xs file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100 cursor-pointer">
                     </div>
-
-                    <!-- Archivo Secundario (validación de series repetidas) -->
-                    <div class="bg-white p-3 rounded-lg border border-slate-200 shadow-sm space-y-1.5">
-                        <label class="block text-xs font-bold text-slate-700">Documento Adicional (opcional — validación de series repetidas)</label>
-                        <p class="text-[11px] text-slate-400">Se revisa si alguna serie aparece más de una vez en este documento. Si es así, se toman todas sus repeticiones <b>excepto la más reciente</b> y se agregan al registro.</p>
-                        <input type="file" id="fileSecondary" accept=".xlsx, .xls, .csv" class="block w-full text-xs text-slate-500 file:mr-3 file:py-1.5 file:px-3 file:rounded-md file:border-0 file:text-xs file:font-semibold file:bg-amber-50 file:text-amber-700 hover:file:bg-amber-100 cursor-pointer">
-                    </div>
                 </div>
-                <div id="secondaryDupSummary" class="hidden mt-3 text-xs bg-amber-50 border border-amber-200 text-amber-800 rounded-lg p-2.5 font-medium"></div>
 
                 <div class="mt-3 flex items-center justify-between">
                     <button onclick="processAndUploadBothFiles()" class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg font-bold text-xs shadow-sm transition flex items-center gap-1.5">
@@ -345,7 +336,7 @@
     <script type="module">
         import { initializeApp, getApps } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
         import { getAuth, signInWithEmailAndPassword, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
-        import { getFirestore, collection, addDoc, getDocs, deleteDoc, doc, setDoc, query, orderBy, limit } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
+        import { getFirestore, collection, addDoc, getDocs, deleteDoc, doc, query, orderBy, limit } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
 
         const firebaseConfig = {
             apiKey: "AIzaSyDRyOIq60td7k1RrzTokcN4fECozmWx0b8",
@@ -370,7 +361,6 @@
         let currentSnapshotId = null;
         let currentTimestampStr = '';
         let chartInstance = null;
-        let savedDaysMap = {}; // Guarda los días congelados desde Firestore
 
         // EXTRAER DÍA EN FORMATO YYYY-MM-DD
         function extractCleanDate(dateTimeStr) {
@@ -389,60 +379,6 @@
                 return `${year}-${month}-${day}`;
             }
             return datePart;
-        }
-
-        // PARSEAR FECHA/HORA A TIMESTAMP COMPARABLE
-        function parseDateTimeToMs(dateTimeStr) {
-            if (!dateTimeStr || dateTimeStr === 'N/A') return NaN;
-            const raw = String(dateTimeStr).trim();
-
-            let m = raw.match(/^(\d{4})-(\d{1,2})-(\d{1,2})[ T]?(\d{1,2}):(\d{2})(:(\d{2}))?/);
-            if (m) {
-                return new Date(+m[1], +m[2]-1, +m[3], +m[4], +m[5], +(m[7]||0)).getTime();
-            }
-
-            m = raw.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})[, ]+(\d{1,2}):(\d{2})(:(\d{2}))?\s*(AM|PM)?/i);
-            if (m) {
-                let hour = +m[4];
-                const ampm = m[8] ? m[8].toUpperCase() : null;
-                if (ampm === 'PM' && hour < 12) hour += 12;
-                if (ampm === 'AM' && hour === 12) hour = 0;
-                return new Date(+m[3], +m[1]-1, +m[2], hour, +m[5], +(m[7]||0)).getTime();
-            }
-
-            m = raw.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
-            if (m) return new Date(+m[3], +m[1]-1, +m[2]).getTime();
-            m = raw.match(/^(\d{4})-(\d{1,2})-(\d{1,2})$/);
-            if (m) return new Date(+m[1], +m[2]-1, +m[3]).getTime();
-
-            const fallback = new Date(raw).getTime();
-            return isNaN(fallback) ? NaN : fallback;
-        }
-
-        function extractOlderDuplicates(records) {
-            const bySerial = {};
-            records.forEach(r => {
-                if (!r.serial || r.serial === 'N/A') return;
-                (bySerial[r.serial] = bySerial[r.serial] || []).push(r);
-            });
-
-            const olderDuplicates = [];
-            Object.values(bySerial).forEach(group => {
-                if (group.length < 2) return;
-
-                const withTs = group.map(r => ({ r, ts: parseDateTimeToMs(r.receivedFull) }));
-                withTs.sort((a, b) => {
-                    const aValid = !isNaN(a.ts), bValid = !isNaN(b.ts);
-                    if (aValid && bValid) return b.ts - a.ts;
-                    if (aValid && !bValid) return -1;
-                    if (!aValid && bValid) return 1;
-                    return 0;
-                });
-
-                withTs.slice(1).forEach(item => olderDuplicates.push(item.r));
-            });
-
-            return olderDuplicates;
         }
 
         // NORMALIZACIÓN DE ESTATUS
@@ -489,7 +425,7 @@
                 document.getElementById('currentUserBadge').innerText = `${user.email} (${isAdmin ? 'Admin' : 'Lectura'})`;
 
                 applyUserPermissions();
-                loadSavedDays().then(() => loadLatestData());
+                loadLatestData();
             } else {
                 document.getElementById('loginScreen').classList.remove('hidden');
                 document.getElementById('appContent').classList.add('hidden');
@@ -537,96 +473,6 @@
             signOut(auth);
         };
 
-        // CARGAR DÍAS CONGELADOS/GUARDADOS DESDE FIRESTORE
-        async function loadSavedDays() {
-            try {
-                savedDaysMap = {};
-                const snap = await getDocs(collection(db, "dias_guardados"));
-                snap.forEach(docSnap => {
-                    savedDaysMap[docSnap.id] = docSnap.data().records || [];
-                });
-            } catch (err) {
-                console.error("Error cargando días guardados:", err);
-            }
-        }
-
-        // GUARDAR UN DÍA (REQUERE CONTRASEÑA "DATA")
-        window.saveDayData = async function(dateKey) {
-            if (!isAdmin) return;
-
-            const inputPass = prompt(`Ingresa la contraseña para guardar de forma permanente los datos del día ${dateKey}:`);
-            if (inputPass !== "DATA") {
-                alert(inputPass === null ? "Operación cancelada." : "Contraseña incorrecta.");
-                return;
-            }
-
-            try {
-                const dayRecords = activeData.filter(r => extractCleanDate(r.receivedFull) === dateKey);
-
-                if (dayRecords.length === 0) {
-                    alert(`No hay registros para guardar en la fecha ${dateKey}.`);
-                    return;
-                }
-
-                await setDoc(doc(db, "dias_guardados", dateKey), {
-                    dateKey: dateKey,
-                    records: dayRecords,
-                    savedAt: new Date().toISOString()
-                });
-
-                savedDaysMap[dateKey] = dayRecords;
-                alert(`¡Los datos del día ${dateKey} se han guardado exitosamente! Aunque se carguen nuevos archivos sin esta información, este día se mantendrá intacto.`);
-                
-                renderDataset(activeData, currentTimestampStr, false);
-            } catch (err) {
-                console.error("Error al guardar data del día:", err);
-                alert("Error al intentar guardar los datos del día.");
-            }
-        };
-
-        // OLVIDAR UN DÍA (REQUIERE CONTRASEÑA "DATA")
-        window.forgetDayData = async function(dateKey) {
-            if (!isAdmin) return;
-
-            const inputPass = prompt(`Ingresa la contraseña para OLVIDAR los datos guardados del día ${dateKey}:`);
-            if (inputPass !== "DATA") {
-                alert(inputPass === null ? "Operación cancelada." : "Contraseña incorrecta.");
-                return;
-            }
-
-            try {
-                await deleteDoc(doc(db, "dias_guardados", dateKey));
-                delete savedDaysMap[dateKey];
-                alert(`Se ha eliminado la congelación del día ${dateKey}. De ahora en adelante este día reflejará solo los datos del archivo que cargues.`);
-                
-                await loadLatestData();
-            } catch (err) {
-                console.error("Error al olvidar data del día:", err);
-                alert("Error al intentar olvidar los datos del día.");
-            }
-        };
-
-        // FUSIONA LOS REGISTROS CON LOS DÍAS GUARDADOS/CONGELADOS
-        function mergeSavedDays(incomingRecords) {
-            const merged = [...incomingRecords];
-
-            Object.keys(savedDaysMap).forEach(savedDate => {
-                const savedRecords = savedDaysMap[savedDate] || [];
-                
-                // Remover cualquier registro que provenga del archivo cargado para este día guardado
-                for (let i = merged.length - 1; i >= 0; i--) {
-                    if (extractCleanDate(merged[i].receivedFull) === savedDate) {
-                        merged.splice(i, 1);
-                    }
-                }
-
-                // Insertar los registros congelados para esa fecha
-                merged.push(...savedRecords);
-            });
-
-            return merged;
-        }
-
         window.loadLatestData = async function() {
             try {
                 await fetchHistoryList();
@@ -638,13 +484,10 @@
                     const latestDoc = snap.docs[0];
                     const data = latestDoc.data();
                     currentSnapshotId = latestDoc.id;
-                    
-                    const finalRecords = mergeSavedDays(data.records || []);
-                    renderDataset(finalRecords, data.formattedDate, false);
+                    renderDataset(data.records, data.formattedDate, false);
                 } else {
                     currentSnapshotId = null;
-                    const finalRecords = mergeSavedDays([]);
-                    renderDataset(finalRecords, "--:--:--", false);
+                    renderDataset([], "--:--:--", false);
                 }
             } catch (err) {
                 console.error("Error al cargar datos:", err);
@@ -709,9 +552,7 @@
 
             currentSnapshotId = selected.id;
             const isLatest = historicalSnapshots[0] && historicalSnapshots[0].id === selectedId;
-
-            const finalRecords = mergeSavedDays(selected.records || []);
-            renderDataset(finalRecords, selected.formattedDate, !isLatest);
+            renderDataset(selected.records, selected.formattedDate, !isLatest);
         };
 
         window.toggleHistoryManager = function() {
@@ -793,7 +634,6 @@
             }
 
             const fileFindCTInput = document.getElementById('fileFindCT');
-            const fileSecondaryInput = document.getElementById('fileSecondary');
 
             if (!fileFindCTInput.files[0]) {
                 alert("Por favor selecciona el archivo principal FIND CT.");
@@ -801,51 +641,24 @@
             }
 
             try {
-                const findCTRecords = await readFileAsMatrix(fileFindCTInput.files[0]);
-                findCTRecords.forEach(r => { r.sourceDoc = 'FIND_CT'; });
-
-                let newRecords = findCTRecords.slice();
-                let olderDuplicates = [];
-
-                if (fileSecondaryInput.files[0]) {
-                    const secondaryRecords = await readFileAsMatrix(fileSecondaryInput.files[0]);
-                    secondaryRecords.forEach(r => { r.sourceDoc = 'SECUNDARIO'; });
-
-                    olderDuplicates = extractOlderDuplicates(secondaryRecords);
-                    olderDuplicates.forEach(r => { r.sourceTag = 'REPETIDA_ANTERIOR (doc. secundario)'; });
-
-                    newRecords = newRecords.concat(olderDuplicates);
-                }
+                const consolidatedRecords = await readFileAsMatrix(fileFindCTInput.files[0]);
 
                 const now = new Date();
                 const formattedDate = `${now.toLocaleDateString()} ${now.toLocaleTimeString()}`;
 
-                // Guardar en Firestore
+                // Guardar lote en Firestore
                 const newDocRef = await addDoc(collection(db, "historial_cargas"), {
                     timestamp: now.getTime(),
                     formattedDate: formattedDate,
-                    records: newRecords
+                    records: consolidatedRecords
                 });
 
                 currentSnapshotId = newDocRef.id;
-
-                const finalMerged = mergeSavedDays(newRecords);
-                renderDataset(finalMerged, formattedDate, false);
+                renderDataset(consolidatedRecords, formattedDate, false);
                 await fetchHistoryList();
 
-                const dupSummaryBox = document.getElementById('secondaryDupSummary');
-                if (fileSecondaryInput.files[0]) {
-                    dupSummaryBox.classList.remove('hidden');
-                    dupSummaryBox.innerText = olderDuplicates.length > 0
-                        ? `Documento adicional revisado: se encontraron ${olderDuplicates.length} repetición(es) de series y se agregaron al registro.`
-                        : `Documento adicional revisado: no se encontraron series repetidas.`;
-                } else {
-                    dupSummaryBox.classList.add('hidden');
-                }
-
                 fileFindCTInput.value = '';
-                fileSecondaryInput.value = '';
-                alert(`Carga exitosa. Registros del archivo: ${newRecords.length}. Total desplegado (con días guardados): ${finalMerged.length}.`);
+                alert(`Carga exitosa. Registros totales cargados: ${consolidatedRecords.length}.`);
 
             } catch (err) {
                 console.error("Error al procesar los archivos:", err);
@@ -981,34 +794,11 @@
                 const totalFinished = stat.pass + stat.fail;
                 const passPercentage = totalFinished > 0 ? ((stat.pass / totalFinished) * 100).toFixed(1) : 0;
                 const passBadgeColor = "bg-emerald-100 text-emerald-800";
-                
-                const isSaved = !!savedDaysMap[date];
-                
-                let adminSaveButtonsHtml = '';
-                if (isAdmin) {
-                    if (isSaved) {
-                        adminSaveButtonsHtml = `
-                            <button onclick="forgetDayData('${date}')" class="text-xs bg-amber-600 hover:bg-amber-700 text-white px-2 py-1 rounded font-bold shadow-sm transition">
-                                Olvidar Data
-                            </button>
-                        `;
-                    } else {
-                        adminSaveButtonsHtml = `
-                            <button onclick="saveDayData('${date}')" class="text-xs bg-blue-600 hover:bg-blue-700 text-white px-2 py-1 rounded font-bold shadow-sm transition">
-                                Guardar Data
-                            </button>
-                        `;
-                    }
-                }
-
-                const savedTagHtml = isSaved 
-                    ? `<span class="ml-2 px-1.5 py-0.5 rounded text-[10px] font-bold bg-blue-100 text-blue-800 border border-blue-200">GUARDADO</span>` 
-                    : '';
 
                 const tr = document.createElement('tr');
                 tr.className = "hover:bg-slate-50 transition";
                 tr.innerHTML = `
-                    <td class="p-3 font-bold text-slate-700">${date}${savedTagHtml}</td>
+                    <td class="p-3 font-bold text-slate-700">${date}</td>
                     <td class="p-3 text-center font-bold text-slate-800">${stat.total}</td>
                     <td class="p-3 text-center font-bold text-emerald-600 bg-emerald-50/50">${stat.pass}</td>
                     <td class="p-3 text-center font-bold text-red-600 bg-red-50/50">${stat.fail}</td>
@@ -1017,7 +807,6 @@
                         <span class="px-2.5 py-1 rounded-md text-xs font-semibold ${passBadgeColor}" title="Calculado sobre ${totalFinished} pruebas concluidas (${stat.pass} PASS / ${stat.fail} FAIL)">${passPercentage}%</span>
                     </td>
                     <td class="p-3 text-right space-x-1">
-                        ${adminSaveButtonsHtml}
                         <button onclick="filterByDayAndStatus('${date}', 'ALL')" class="text-xs bg-slate-100 hover:bg-slate-200 text-slate-700 px-2 py-1 rounded font-semibold">Ver Todo el Día</button>
                         <button onclick="filterByDayAndStatus('${date}', 'PASS')" class="text-xs bg-emerald-100 hover:bg-emerald-200 text-emerald-800 px-2 py-1 rounded font-semibold">Solo Pass (${stat.pass})</button>
                         <button onclick="filterByDayAndStatus('${date}', 'FAIL')" class="text-xs bg-red-100 hover:bg-red-200 text-red-800 px-2 py-1 rounded font-semibold">Solo Fail (${stat.fail})</button>
@@ -1091,15 +880,9 @@
                 if (norm === 'RUNNING') badgeStyle = 'bg-blue-100 text-blue-800';
                 if (norm === 'PASS') badgeStyle = 'bg-emerald-100 text-emerald-800';
 
-                const displayStatus = norm === 'PASS' ? 'PASS' : (row.rawStatus || row.status);
-
-                const dupBadge = row.sourceTag
-                    ? `<span class="ml-1.5 px-1.5 py-0.5 rounded text-[10px] font-bold bg-amber-100 text-amber-700 align-middle" title="Repetición encontrada en el documento adicional (no la más reciente)">REPETIDA</span>`
-                    : '';
-
                 tr.innerHTML = `
-                    <td class="p-3 font-mono font-bold text-slate-800">${row.serial}${dupBadge}</td>
-                    <td class="p-3"><span class="px-2.5 py-1 rounded-full text-xs font-semibold ${badgeStyle}">${displayStatus}</span></td>
+                    <td class="p-3 font-mono font-bold text-slate-800">${row.serial}</td>
+                    <td class="p-3"><span class="px-2.5 py-1 rounded-full text-xs font-semibold ${badgeStyle}">${row.rawStatus || row.status}</span></td>
                     <td class="p-3 text-slate-500">${row.model}</td>
                     <td class="p-3 text-slate-500">${row.receivedFull}</td>
                 `;
@@ -1181,7 +964,7 @@
 
             const formattedForExcel = exportData.map(item => ({
                 "Serial CT": item.serial,
-                "Status / Flujo": item.status === 'PASS' ? 'PASS' : (item.rawStatus || item.status),
+                "Status / Flujo": item.rawStatus || item.status,
                 "TLA / Modelo": item.model,
                 "Último Evento": item.receivedFull
             }));
