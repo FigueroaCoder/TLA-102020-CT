@@ -10,10 +10,9 @@
     <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels@2.2.0"></script>
     <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 
-    <!-- SCRIPT DE SEGURIDAD Y BLOQUEOS AVANZADOS + AUTORECARGA Y TEMPORIZADOR (1 HORA) -->
+    <!-- SCRIPT DE SEGURIDAD Y TEMPORIZADOR (1 HORA) -->
     <script>
         (function() {
-            // Ajustado a 1 hora (3600 segundos)
             const TOTAL_SECONDS = 60 * 60; 
             let secondsLeft = TOTAL_SECONDS;
 
@@ -30,7 +29,6 @@
                 }
             }
 
-            // Iniciar cuenta regresiva cada segundo
             setInterval(() => {
                 secondsLeft--;
                 if (secondsLeft <= 0) {
@@ -137,7 +135,6 @@
                     <div>
                         <span class="text-[10px] text-slate-400 block font-bold uppercase tracking-wider">Último Corte</span>
                         <span id="lastUpdatedText" class="text-sm font-extrabold text-slate-700 block">--:--:--</span>
-                        <!-- Reloj regresivo formateado HH:MM:SS empezando en 01:00:00 -->
                         <span id="autoRefreshTimer" class="text-[11px] font-semibold text-blue-600 block mt-0.5">Próxima recarga: 01:00:00</span>
                     </div>
                     <div class="h-8 w-px bg-slate-200 hidden sm:block"></div>
@@ -148,17 +145,34 @@
                 </div>
             </div>
 
-            <div class="p-4 bg-white flex flex-wrap items-center justify-between gap-3">
-                <div class="flex flex-wrap items-center gap-2">
-                    <label id="uploadBtnContainer" class="hidden cursor-pointer bg-blue-600 hover:bg-blue-700 text-white px-3.5 py-2 rounded-lg font-semibold text-xs shadow-sm transition flex items-center gap-1.5">
-                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"></path></svg>
-                        <span>Cargar Archivo Excel</span>
-                        <input type="file" id="fileUploader" accept=".xlsx, .xls, .csv" class="hidden">
-                    </label>
-                </div>
+            <!-- MÓDULO DE CARGA DE ARCHIVO (ADMIN ONLY) -->
+            <div id="uploadSection" class="hidden p-4 bg-slate-50/80 border-b border-slate-200">
+                <p class="text-xs font-bold text-slate-700 uppercase mb-3">Carga de Archivo (Exclusivo Administrador)</p>
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    
+                    <!-- Archivo FIND CT -->
+                    <div class="bg-white p-3 rounded-lg border border-slate-200 shadow-sm space-y-1.5">
+                        <label class="block text-xs font-bold text-slate-700">Documento FIND CT / Bulk Trace (Excel o CSV)</label>
+                        <p class="text-[11px] text-slate-400">Fuente principal: de aquí se toman directamente los estatus PASS / FAIL / RUNNING de cada serie.</p>
+                        <input type="file" id="fileFindCT" accept=".xlsx, .xls, .csv" class="block w-full text-xs text-slate-500 file:mr-3 file:py-1.5 file:px-3 file:rounded-md file:border-0 file:text-xs file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100 cursor-pointer">
+                    </div>
 
-                <div>
-                    <button id="deleteActiveBtn" onclick="deleteCurrentSnapshot()" class="hidden bg-red-50 hover:bg-red-100 text-red-600 border border-red-200 px-3.5 py-2 rounded-lg font-semibold text-xs transition">
+                    <!-- Archivo Secundario (validación de series repetidas) -->
+                    <div class="bg-white p-3 rounded-lg border border-slate-200 shadow-sm space-y-1.5">
+                        <label class="block text-xs font-bold text-slate-700">Documento Adicional (opcional — validación de series repetidas)</label>
+                        <p class="text-[11px] text-slate-400">Se revisa si alguna serie aparece más de una vez en este documento. Si es así, se toman todas sus repeticiones <b>excepto la más reciente</b> y se agregan al registro.</p>
+                        <input type="file" id="fileSecondary" accept=".xlsx, .xls, .csv" class="block w-full text-xs text-slate-500 file:mr-3 file:py-1.5 file:px-3 file:rounded-md file:border-0 file:text-xs file:font-semibold file:bg-amber-50 file:text-amber-700 hover:file:bg-amber-100 cursor-pointer">
+                    </div>
+                </div>
+                <div id="secondaryDupSummary" class="hidden mt-3 text-xs bg-amber-50 border border-amber-200 text-amber-800 rounded-lg p-2.5 font-medium"></div>
+
+                <div class="mt-3 flex items-center justify-between">
+                    <button onclick="processAndUploadBothFiles()" class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg font-bold text-xs shadow-sm transition flex items-center gap-1.5">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"></path></svg>
+                        <span>Procesar y Cargar Corte</span>
+                    </button>
+
+                    <button id="deleteActiveBtn" onclick="deleteCurrentSnapshot()" class="hidden bg-red-50 hover:bg-red-100 text-red-600 border border-red-200 px-3.5 py-1.5 rounded-lg font-semibold text-xs transition">
                         Borrar Corte Activo
                     </button>
                 </div>
@@ -357,6 +371,97 @@
         let currentTimestampStr = '';
         let chartInstance = null;
 
+        // EXTRAER DÍA EN FORMATO YYYY-MM-DD
+        function extractCleanDate(dateTimeStr) {
+            if (!dateTimeStr || dateTimeStr === 'N/A') return 'Sin Fecha';
+            const raw = String(dateTimeStr).trim();
+            const datePart = raw.split(' ')[0] || raw;
+
+            if (/^\d{4}-\d{2}-\d{2}$/.test(datePart)) {
+                return datePart;
+            }
+            if (/^\d{1,2}\/\d{1,2}\/\d{4}$/.test(datePart)) {
+                const parts = datePart.split('/');
+                const month = parts[0].padStart(2, '0');
+                const day = parts[1].padStart(2, '0');
+                const year = parts[2];
+                return `${year}-${month}-${day}`;
+            }
+            return datePart;
+        }
+
+        // PARSEAR FECHA/HORA A TIMESTAMP COMPARABLE (soporta M/D/YYYY H:MM[:SS], YYYY-MM-DD H:MM[:SS], y variantes)
+        function parseDateTimeToMs(dateTimeStr) {
+            if (!dateTimeStr || dateTimeStr === 'N/A') return NaN;
+            const raw = String(dateTimeStr).trim();
+
+            // YYYY-MM-DD[ T]HH:MM[:SS]
+            let m = raw.match(/^(\d{4})-(\d{1,2})-(\d{1,2})[ T]?(\d{1,2}):(\d{2})(:(\d{2}))?/);
+            if (m) {
+                return new Date(+m[1], +m[2]-1, +m[3], +m[4], +m[5], +(m[7]||0)).getTime();
+            }
+
+            // M/D/YYYY H:MM[:SS] [AM/PM]
+            m = raw.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})[, ]+(\d{1,2}):(\d{2})(:(\d{2}))?\s*(AM|PM)?/i);
+            if (m) {
+                let hour = +m[4];
+                const ampm = m[8] ? m[8].toUpperCase() : null;
+                if (ampm === 'PM' && hour < 12) hour += 12;
+                if (ampm === 'AM' && hour === 12) hour = 0;
+                return new Date(+m[3], +m[1]-1, +m[2], hour, +m[5], +(m[7]||0)).getTime();
+            }
+
+            // Solo fecha, sin hora: M/D/YYYY o YYYY-MM-DD
+            m = raw.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+            if (m) return new Date(+m[3], +m[1]-1, +m[2]).getTime();
+            m = raw.match(/^(\d{4})-(\d{1,2})-(\d{1,2})$/);
+            if (m) return new Date(+m[1], +m[2]-1, +m[3]).getTime();
+
+            // Último recurso: dejar que el motor lo intente
+            const fallback = new Date(raw).getTime();
+            return isNaN(fallback) ? NaN : fallback;
+        }
+
+        // Dado un listado de registros {serial, ...}, agrupa por serie y para cada serie que
+        // aparece más de una vez, devuelve TODAS sus repeticiones EXCEPTO la más reciente
+        // (la más reciente se descarta porque se asume ya reflejada / vigente).
+        function extractOlderDuplicates(records) {
+            const bySerial = {};
+            records.forEach(r => {
+                if (!r.serial || r.serial === 'N/A') return;
+                (bySerial[r.serial] = bySerial[r.serial] || []).push(r);
+            });
+
+            const olderDuplicates = [];
+            Object.values(bySerial).forEach(group => {
+                if (group.length < 2) return; // no está repetida, no aplica
+
+                const withTs = group.map(r => ({ r, ts: parseDateTimeToMs(r.receivedFull) }));
+                // La más reciente = mayor timestamp; si no se puede parsear fecha, se manda al final (se asume la más vieja)
+                withTs.sort((a, b) => {
+                    const aValid = !isNaN(a.ts), bValid = !isNaN(b.ts);
+                    if (aValid && bValid) return b.ts - a.ts; // desc: más reciente primero
+                    if (aValid && !bValid) return -1;
+                    if (!aValid && bValid) return 1;
+                    return 0;
+                });
+
+                // todas menos la primera (la más reciente) se consideran "repeticiones anteriores"
+                withTs.slice(1).forEach(item => olderDuplicates.push(item.r));
+            });
+
+            return olderDuplicates;
+        }
+
+        // NORMALIZACIÓN DE ESTATUS
+        function normalizeStatus(statusRaw) {
+            const st = String(statusRaw || '').trim().toUpperCase();
+            if (st === 'P' || st.includes('PASS') || st.includes('EXITO')) return 'PASS';
+            if (st === 'R' || st.includes('RUN') || st.includes('TEST') || st.includes('CORRIENDO')) return 'RUNNING';
+            if (st === 'F' || st.includes('FAIL') || st.includes('FALLA')) return 'FAIL';
+            return statusRaw || 'SIN ESTATUS';
+        }
+
         window.toggleDailySummary = function() {
             const content = document.getElementById('dailySummaryContent');
             const chevron = document.getElementById('dailySummaryChevron');
@@ -393,7 +498,6 @@
 
                 applyUserPermissions();
                 loadLatestData();
-                setupFileUploader();
             } else {
                 document.getElementById('loginScreen').classList.remove('hidden');
                 document.getElementById('appContent').classList.add('hidden');
@@ -401,18 +505,18 @@
         });
 
         function applyUserPermissions() {
-            const uploadBtn = document.getElementById('uploadBtnContainer');
+            const uploadSection = document.getElementById('uploadSection');
             const deleteActiveBtn = document.getElementById('deleteActiveBtn');
             const toggleHistoryBtn = document.getElementById('toggleHistoryBtn');
             const adminHistoryBar = document.getElementById('adminHistoryBar');
 
             if (isAdmin) {
-                uploadBtn.classList.remove('hidden');
+                uploadSection.classList.remove('hidden');
                 deleteActiveBtn.classList.remove('hidden');
                 toggleHistoryBtn.classList.remove('hidden');
                 adminHistoryBar.classList.remove('hidden');
             } else {
-                uploadBtn.classList.add('hidden');
+                uploadSection.classList.add('hidden');
                 deleteActiveBtn.classList.add('hidden');
                 toggleHistoryBtn.classList.add('hidden');
                 adminHistoryBar.classList.add('hidden');
@@ -548,34 +652,121 @@
             }
         };
 
-        function formatRawDocs(rawMatrix) {
-            return rawMatrix.map(row => {
-                const colA = String(row[0] || '').trim();
-                const colB = String(row[1] || '').trim();
-                const colE = String(row[4] || '').trim();
-                const colG = String(row[6] || '').trim();
-                const colH = String(row[7] || '').trim();
+        // LEER EXCEL/CSV COMO MATRIZ DE TEXTO
+        function readFileAsMatrix(file) {
+            return new Promise((resolve, reject) => {
+                const reader = new FileReader();
+                reader.onload = (evt) => {
+                    try {
+                        const data = new Uint8Array(evt.target.result);
+                        const workbook = XLSX.read(data, { type: 'array', raw: true });
+                        const firstSheet = workbook.Sheets[workbook.SheetNames[0]];
+                        const rawMatrix = XLSX.utils.sheet_to_json(firstSheet, { header: 1, raw: false });
+                        
+                        if (rawMatrix.length === 0) return resolve([]);
+                        
+                        const headerRow = rawMatrix[0].map(h => String(h || '').trim().toUpperCase());
+                        
+                        const idxSerial = headerRow.findIndex(h => h.includes('SERIAL'));
+                        const idxStatus = headerRow.findIndex(h => h.includes('STATUS'));
+                        const idxModel = headerRow.findIndex(h => h.includes('TLA') || h.includes('MODEL'));
+                        const idxDate = headerRow.findIndex(h => h.includes('LAST EVENT') || h.includes('DATE') || h.includes('FECHA'));
 
-                const rawStatus = colB.toUpperCase();
-                let fullStatus = colB;
+                        const rows = rawMatrix.slice(1);
+                        const structuredData = rows.map(row => {
+                            const serial = idxSerial !== -1 ? String(row[idxSerial] || '').trim() : String(row[0] || '').trim();
+                            const statusRaw = idxStatus !== -1 ? String(row[idxStatus] || '').trim() : String(row[1] || '').trim();
+                            const model = idxModel !== -1 ? String(row[idxModel] || '').trim() : String(row[4] || '').trim();
+                            const receivedFull = idxDate !== -1 ? String(row[idxDate] || '').trim() : String(row[7] || '').trim();
 
-                if (rawStatus.includes('PASS') || rawStatus.includes('EXITO')) {
-                    fullStatus = 'PASS';
-                } else if (rawStatus.includes('FAIL') || rawStatus.includes('FALLA')) {
-                    fullStatus = colG ? `FAIL - ${colG}` : 'FAIL';
-                } else if (rawStatus.includes('RUN') || rawStatus.includes('TEST') || rawStatus.includes('CORRIENDO')) {
-                    fullStatus = colB || 'RUNNING';
+                            return {
+                                serial: serial,
+                                status: normalizeStatus(statusRaw),
+                                rawStatus: statusRaw,
+                                model: model || 'N/A',
+                                receivedFull: receivedFull || 'N/A'
+                            };
+                        }).filter(item => item.serial !== '');
+
+                        resolve(structuredData);
+                    } catch (e) {
+                        reject(e);
+                    }
+                };
+                reader.onerror = reject;
+                reader.readAsArrayBuffer(file);
+            });
+        }
+
+        // PROCESAR Y CARGAR EL ARCHIVO
+        window.processAndUploadBothFiles = async function() {
+            if (!isAdmin) {
+                alert("No tienes permisos para subir archivos.");
+                return;
+            }
+
+            const fileFindCTInput = document.getElementById('fileFindCT');
+            const fileSecondaryInput = document.getElementById('fileSecondary');
+
+            if (!fileFindCTInput.files[0]) {
+                alert("Por favor selecciona el archivo principal FIND CT.");
+                return;
+            }
+
+            try {
+                // Fuente principal: PASS / FAIL / RUNNING salen directamente de FIND CT
+                const findCTRecords = await readFileAsMatrix(fileFindCTInput.files[0]);
+                findCTRecords.forEach(r => { r.sourceDoc = 'FIND_CT'; });
+
+                let consolidatedRecords = findCTRecords.slice();
+                let olderDuplicates = [];
+
+                // Documento adicional (opcional): valida series repetidas dentro de ESE documento.
+                // Si una serie aparece más de una vez ahí, se toman todas sus repeticiones
+                // MENOS la más reciente, y esas se agregan al registro de información.
+                if (fileSecondaryInput.files[0]) {
+                    const secondaryRecords = await readFileAsMatrix(fileSecondaryInput.files[0]);
+                    secondaryRecords.forEach(r => { r.sourceDoc = 'SECUNDARIO'; });
+
+                    olderDuplicates = extractOlderDuplicates(secondaryRecords);
+                    olderDuplicates.forEach(r => { r.sourceTag = 'REPETIDA_ANTERIOR (doc. secundario)'; });
+
+                    consolidatedRecords = consolidatedRecords.concat(olderDuplicates);
                 }
 
-                return {
-                    serial: colA || 'N/A',
-                    status: fullStatus || 'SIN ESTATUS',
-                    model: colE || 'N/A',
-                    phase: 'N/A',
-                    receivedFull: colH || 'N/A'
-                };
-            }).filter(item => item.serial !== 'N/A' && item.serial !== '');
-        }
+                const now = new Date();
+                const formattedDate = `${now.toLocaleDateString()} ${now.toLocaleTimeString()}`;
+
+                // Guardar lote en Firestore
+                const newDocRef = await addDoc(collection(db, "historial_cargas"), {
+                    timestamp: now.getTime(),
+                    formattedDate: formattedDate,
+                    records: consolidatedRecords
+                });
+
+                currentSnapshotId = newDocRef.id;
+                renderDataset(consolidatedRecords, formattedDate, false);
+                await fetchHistoryList();
+
+                const dupSummaryBox = document.getElementById('secondaryDupSummary');
+                if (fileSecondaryInput.files[0]) {
+                    dupSummaryBox.classList.remove('hidden');
+                    dupSummaryBox.innerText = olderDuplicates.length > 0
+                        ? `Documento adicional revisado: se encontraron ${olderDuplicates.length} repetición(es) de series (excluyendo la más reciente de cada una) y se agregaron al registro.`
+                        : `Documento adicional revisado: no se encontraron series repetidas.`;
+                } else {
+                    dupSummaryBox.classList.add('hidden');
+                }
+
+                fileFindCTInput.value = '';
+                fileSecondaryInput.value = '';
+                alert(`Carga exitosa. Registros de FIND CT: ${findCTRecords.length}. Repeticiones agregadas del documento adicional: ${olderDuplicates.length}. Total registros: ${consolidatedRecords.length}.`);
+
+            } catch (err) {
+                console.error("Error al procesar los archivos:", err);
+                alert("Ocurrió un error al procesar el archivo Excel/CSV.");
+            }
+        };
 
         function renderDataset(data, timestampText, isHistorical) {
             activeData = data || [];
@@ -621,40 +812,27 @@
             if (dupElem) dupElem.innerText = duplicateSerialsCount;
 
             data.forEach(row => {
-                const st = row.status.toUpperCase();
-                if (st.includes('RUN') || st.includes('TEST') || st.includes('CORRIENDO')) {
+                const norm = row.status;
+                if (norm === 'RUNNING') {
                     countRun++;
-                } else if (st.includes('PASS') || st.includes('EXITO')) {
+                } else if (norm === 'PASS') {
                     countPass++;
                 } else {
                     countFail++;
                 }
 
                 if (row.receivedFull && row.receivedFull !== 'N/A') {
-                    const parsedDate = new Date(row.receivedFull);
-                    if (!isNaN(parsedDate.getTime())) {
-                        if (!firstRecordTime || parsedDate < firstRecordTime) {
-                            firstRecordTime = parsedDate;
-                        }
-                    } else if (!firstRecordTime) {
-                        firstRecordTime = row.receivedFull;
+                    const cleanDate = extractCleanDate(row.receivedFull);
+                    if (!firstRecordTime || cleanDate < firstRecordTime) {
+                        firstRecordTime = cleanDate;
                     }
                 }
             });
 
-            let firstTimeStr = "--";
-            if (firstRecordTime) {
-                if (firstRecordTime instanceof Date) {
-                    firstTimeStr = `${firstRecordTime.toLocaleDateString()} ${firstRecordTime.toLocaleTimeString()}`;
-                } else {
-                    firstTimeStr = firstRecordTime;
-                }
-            }
-
             const rangeElem = document.getElementById('chartDateRange');
             if (rangeElem) {
                 if (data.length > 0) {
-                    rangeElem.innerText = `Del ${firstTimeStr} al ${currentTimestampStr}`;
+                    rangeElem.innerText = `Del ${firstRecordTime || '--'} al ${currentTimestampStr}`;
                 } else {
                     rangeElem.innerText = `Rango: Sin datos`;
                 }
@@ -674,11 +852,7 @@
             let totalRunningSum = 0;
 
             data.forEach(row => {
-                let dateKey = "Sin Fecha";
-                if (row.receivedFull && row.receivedFull !== 'N/A') {
-                    const parts = row.receivedFull.split(' ');
-                    dateKey = parts[0] || "Sin Fecha";
-                }
+                const dateKey = extractCleanDate(row.receivedFull);
 
                 if (!dailyMap[dateKey]) {
                     dailyMap[dateKey] = { total: 0, pass: 0, fail: 0, run: 0 };
@@ -686,11 +860,11 @@
 
                 dailyMap[dateKey].total++;
 
-                const st = row.status.toUpperCase();
-                if (st.includes('RUN') || st.includes('TEST') || st.includes('CORRIENDO')) {
+                const norm = row.status;
+                if (norm === 'RUNNING') {
                     dailyMap[dateKey].run++;
                     totalRunningSum++;
-                } else if (st.includes('PASS') || st.includes('EXITO')) {
+                } else if (norm === 'PASS') {
                     dailyMap[dateKey].pass++;
                 } else {
                     dailyMap[dateKey].fail++;
@@ -746,17 +920,13 @@
 
         window.filterByDayAndStatus = function(targetDate, statusType) {
             const filtered = activeData.filter(row => {
-                let rowDate = "Sin Fecha";
-                if (row.receivedFull && row.receivedFull !== 'N/A') {
-                    rowDate = row.receivedFull.split(' ')[0] || "Sin Fecha";
-                }
-
+                const rowDate = extractCleanDate(row.receivedFull);
                 if (rowDate !== targetDate) return false;
 
-                const st = row.status.toUpperCase();
-                if (statusType === 'PASS') return st.includes('PASS') || st.includes('EXITO');
-                if (statusType === 'FAIL') return !st.includes('RUN') && !st.includes('TEST') && !st.includes('CORRIENDO') && !st.includes('PASS') && !st.includes('EXITO');
-                if (statusType === 'RUN') return st.includes('RUN') || st.includes('TEST') || st.includes('CORRIENDO');
+                const norm = row.status;
+                if (statusType === 'PASS') return norm === 'PASS';
+                if (statusType === 'FAIL') return norm === 'FAIL';
+                if (statusType === 'RUN') return norm === 'RUNNING';
 
                 return true;
             });
@@ -774,10 +944,10 @@
 
         window.filterByStatusCard = function(category) {
             const filtered = activeData.filter(row => {
-                const st = row.status.toUpperCase();
-                if (category === 'RUNNING') return st.includes('RUN') || st.includes('TEST') || st.includes('CORRIENDO');
-                if (category === 'PASS') return st.includes('PASS') || st.includes('EXITO');
-                if (category === 'FAIL') return !st.includes('RUN') && !st.includes('TEST') && !st.includes('CORRIENDO') && !st.includes('PASS') && !st.includes('EXITO');
+                const norm = row.status;
+                if (category === 'RUNNING') return norm === 'RUNNING';
+                if (category === 'PASS') return norm === 'PASS';
+                if (category === 'FAIL') return norm === 'FAIL';
                 return true;
             });
 
@@ -807,14 +977,20 @@
                 const tr = document.createElement('tr');
                 tr.className = 'hover:bg-slate-50 transition cursor-pointer';
 
-                const st = row.status.toUpperCase();
+                const norm = row.status;
                 let badgeStyle = 'bg-red-100 text-red-800';
-                if (st.includes('RUN') || st.includes('TEST') || st.includes('CORRIENDO')) badgeStyle = 'bg-blue-100 text-blue-800';
-                if (st.includes('PASS') || st.includes('EXITO')) badgeStyle = 'bg-emerald-100 text-emerald-800';
+                if (norm === 'RUNNING') badgeStyle = 'bg-blue-100 text-blue-800';
+                if (norm === 'PASS') badgeStyle = 'bg-emerald-100 text-emerald-800';
+
+                const displayStatus = norm === 'PASS' ? 'PASS' : (row.rawStatus || row.status);
+
+                const dupBadge = row.sourceTag
+                    ? `<span class="ml-1.5 px-1.5 py-0.5 rounded text-[10px] font-bold bg-amber-100 text-amber-700 align-middle" title="Repetición encontrada en el documento adicional (no la más reciente)">REPETIDA</span>`
+                    : '';
 
                 tr.innerHTML = `
-                    <td class="p-3 font-mono font-bold text-slate-800">${row.serial}</td>
-                    <td class="p-3"><span class="px-2.5 py-1 rounded-full text-xs font-semibold ${badgeStyle}">${row.status}</span></td>
+                    <td class="p-3 font-mono font-bold text-slate-800">${row.serial}${dupBadge}</td>
+                    <td class="p-3"><span class="px-2.5 py-1 rounded-full text-xs font-semibold ${badgeStyle}">${displayStatus}</span></td>
                     <td class="p-3 text-slate-500">${row.model}</td>
                     <td class="p-3 text-slate-500">${row.receivedFull}</td>
                 `;
@@ -896,7 +1072,7 @@
 
             const formattedForExcel = exportData.map(item => ({
                 "Serial CT": item.serial,
-                "Status / Flujo": item.status,
+                "Status / Flujo": item.status === 'PASS' ? 'PASS' : (item.rawStatus || item.status),
                 "TLA / Modelo": item.model,
                 "Último Evento": item.receivedFull
             }));
@@ -909,54 +1085,6 @@
             const suffix = onlyFiltered ? "filtrado" : "completo";
             XLSX.writeFile(workbook, `Reporte_102020_${suffix}_${dateClean}.xlsx`);
         };
-
-        function setupFileUploader() {
-            const uploader = document.getElementById('fileUploader');
-            if (!uploader) return;
-
-            uploader.addEventListener('change', function(e) {
-                if (!isAdmin) {
-                    alert("No tienes permisos para subir archivos.");
-                    return;
-                }
-
-                const file = e.target.files[0];
-                if (!file) return;
-
-                const reader = new FileReader();
-                reader.onload = async function(evt) {
-                    const data = new Uint8Array(evt.target.result);
-                    const workbook = XLSX.read(data, { type: 'array', cellDates: true, dateNF: 'yyyy-mm-dd hh:mm:ss' });
-                    const firstSheet = workbook.Sheets[workbook.SheetNames[0]];
-                    
-                    const rawMatrix = XLSX.utils.sheet_to_json(firstSheet, { header: 1, raw: false, dateNF: 'yyyy-mm-dd hh:mm:ss' });
-
-                    if (rawMatrix.length > 0) rawMatrix.shift();
-
-                    const parsedRecords = formatRawDocs(rawMatrix);
-                    const now = new Date();
-                    const formattedDate = `${now.toLocaleDateString()} ${now.toLocaleTimeString()}`;
-
-                    try {
-                        const newDocRef = await addDoc(collection(db, "historial_cargas"), {
-                            timestamp: now.getTime(),
-                            formattedDate: formattedDate,
-                            records: parsedRecords
-                        });
-
-                        currentSnapshotId = newDocRef.id;
-                        renderDataset(parsedRecords, formattedDate, false);
-                        await fetchHistoryList();
-                        uploader.value = '';
-                        alert(`Archivo procesado con éxito. Nuevo corte registrado a las ${formattedDate}.`);
-                    } catch (err) {
-                        console.error("Error al guardar snapshot:", err);
-                        alert("Error guardando el corte en Firestore.");
-                    }
-                };
-                reader.readAsArrayBuffer(file);
-            });
-        }
     </script>
 </body>
 </html>
